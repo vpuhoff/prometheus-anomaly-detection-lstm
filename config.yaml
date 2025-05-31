@@ -1,0 +1,114 @@
+# URL вашего Prometheus сервера
+prometheus_url: "http://127.0.0.1:9090"
+
+# Запросы PromQL для сбора метрик
+# Ключ - это имя колонки в итоговом DataFrame
+queries:
+  virtual_memory_free_bytes: 'windows_os_virtual_memory_free_bytes{job="Windows Exporter"}'
+  system_threads: 'windows_system_threads{job="Windows Exporter"}'
+  disk_free_c: 'windows_logical_disk_free_bytes{volume="C:",job="Windows Exporter"}'
+  network_received_bytes_total: 'rate(windows_net_bytes_received_total{job="Windows Exporter"}[1m])'
+  nvidia_smi_utilization_memory_ratio: nvidia_smi_utilization_memory_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+  nvidia_smi_utilization_gpu_ratio: nvidia_smi_utilization_gpu_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+  nvidia_smi_temperature_gpu: nvidia_smi_temperature_gpu{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+  nvidia_smi_power_draw_watts: nvidia_smi_power_draw_watts{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+  nvidia_smi_fan_speed_ratio: nvidia_smi_fan_speed_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+
+# Настройки сбора данных
+data_settings:
+  # За какой период в прошлом собирать данные (в часах).
+  # Если указано 0 или отсутствует, и заданы start_time_iso/end_time_iso, будут использованы они.
+  collection_period_hours: 336
+
+  # Опционально: можно задать конкретные даты и время начала/конца в формате ISO (YYYY-MM-DDTHH:MM:SS)
+  # Если они заданы и collection_period_hours = 0 или отсутствует, будут иметь приоритет.
+  # start_time_iso: "2025-05-31T10:00:00"
+  # end_time_iso: "2025-05-31T11:00:00"
+
+  # Шаг выборки данных (в секундах или формате Prometheus '15s', '1m', '1h')
+  step: "2m"
+
+  # Имя файла для сохранения итогового датасета
+  output_filename: "prometheus_metrics_data.parquet"
+
+preprocessing_settings:
+  # Имя файла с "сырыми" данными (вход для этого скрипта)
+  # Обычно это output_filename из секции data_settings
+  # Если не указано, будет взято из data_settings.output_filename
+  # input_filename: "prometheus_metrics_data.parquet" 
+
+  # Стратегия заполнения NaN
+  # Возможные значения:
+  # - "ffill_then_bfill": сначала прямое, потом обратное заполнение
+  # - "mean": заполнение средним значением по колонке
+  # - "median": заполнение медианой по колонке
+  # - "drop_rows": удаление строк с любым NaN
+  # - "none": ничего не делать с NaN (не рекомендуется для большинства моделей)
+  nan_fill_strategy: "ffill_then_bfill"
+
+  # Тип скейлера для нормализации/стандартизации
+  # Возможные значения: "MinMaxScaler", "StandardScaler"
+  scaler_type: "MinMaxScaler"
+
+  # Имя файла для сохранения обработанных данных
+  processed_output_filename: "processed_metrics_data.parquet"
+
+  # Имя файла для сохранения обученного скейлера
+  scaler_output_filename: "fitted_scaler.joblib"
+
+
+training_settings:
+  # Имя файла с предобработанными данными (вход для этого скрипта)
+  # Если не указано, будет взято из preprocessing_settings.processed_output_filename
+  # input_processed_filename: "processed_metrics_data.parquet"
+
+  # Имя файла для сохранения обученной модели
+  model_output_filename: "lstm_autoencoder_model.keras" # Используем новый формат .keras
+
+  # Длина последовательности (окна) для LSTM
+  # Например, если ваши данные имеют шаг 30 секунд, 20 шагов = 10 минут данных в одной последовательности
+  sequence_length: 20
+
+  # Доля данных для обучающей выборки (остальное пойдет на валидацию)
+  train_split_ratio: 0.8
+
+  # Параметры обучения
+  epochs: 50
+  batch_size: 64 # Обычно степень двойки
+  learning_rate: 0.001
+
+  # Параметры для EarlyStopping (опционально, но рекомендуется)
+  # 0 или null для отключения
+  early_stopping_patience: 10 # Сколько эпох ждать улучшения перед остановкой
+
+  # Параметры архитектуры (можно будет усложнить позже)
+  # Количество юнитов в первом LSTM слое кодировщика
+  lstm_units_encoder1: 64
+  # Количество юнитов во втором LSTM слое кодировщика (латентное представление)
+  lstm_units_encoder2_latent: 32
+  # Количество юнитов в первом LSTM слое декодировщика
+  lstm_units_decoder1: 32
+  # Количество юнитов во втором LSTM слое декодировщика
+  lstm_units_decoder2: 64
+
+real_time_anomaly_detection:
+  # Как часто (в секундах) опрашивать Prometheus и выполнять детекцию
+  query_interval_seconds: 10
+
+  # Порог ошибки реконструкции (MSE) для объявления аномалии.
+  # !!! ВАЖНО: Это значение нужно тщательно подобрать на основе анализа
+  # гистограммы ошибок на валидационных/тестовых "нормальных" данных.
+  # Например, 95-й или 99-й перцентиль этих ошибок.
+  # Пока что это значение - ЗАГЛУШКА.
+  anomaly_threshold_mse: 0.0025 # Пример, требует точной настройки!
+
+  # Порт, на котором будет работать Prometheus exporter этого модуля
+  exporter_port: 8901 # Убедитесь, что порт не занят
+
+  # Префикс для метрик, которые будет публиковать этот экспортер (опционально)
+  metrics_prefix: "anomaly_detector_"
+
+  # Настройки для запроса данных для одного окна детекции:
+  # Длительность шага данных, как в data_settings (нужно для расчета окна)
+  # Если не указано, будет взято из data_settings.step
+  # data_step_duration: "30s" # например, "30s", "1m"
