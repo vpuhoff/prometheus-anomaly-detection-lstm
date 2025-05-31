@@ -2,3 +2,4 @@
 *.keras
 *.parquet
 *.png
+*.npy

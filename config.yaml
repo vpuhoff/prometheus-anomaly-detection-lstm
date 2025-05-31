@@ -6,7 +6,6 @@ prometheus_url: "http://127.0.0.1:9090"
 queries:
   virtual_memory_free_bytes: 'windows_os_virtual_memory_free_bytes{job="Windows Exporter"}'
   system_threads: 'windows_system_threads{job="Windows Exporter"}'
-  disk_free_c: 'windows_logical_disk_free_bytes{volume="C:",job="Windows Exporter"}'
   network_received_bytes_total: 'rate(windows_net_bytes_received_total{job="Windows Exporter"}[1m])'
   nvidia_smi_utilization_memory_ratio: nvidia_smi_utilization_memory_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
   nvidia_smi_utilization_gpu_ratio: nvidia_smi_utilization_gpu_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
@@ -56,40 +55,44 @@ preprocessing_settings:
   # Имя файла для сохранения обученного скейлера
   scaler_output_filename: "fitted_scaler.joblib"
 
+data_filtering_settings:
+  # input_processed_filename: будет взят из preprocessing_settings.processed_output_filename
+  # model_filename: будет взят из training_settings.model_output_filename
+  # sequence_length: будет взят из training_settings.sequence_length
+  # anomaly_threshold_mse: будет взят из real_time_anomaly_detection.anomaly_threshold_mse
+
+  # Имена выходных файлов для отфильтрованных последовательностей
+  normal_sequences_output_filename: "normal_sequences.npy"
+  anomalous_sequences_output_filename: "anomalous_sequences.npy"
+  # Опционально: сохранить все ошибки реконструкции для анализа
+  # all_sequence_errors_output_filename: "all_sequence_errors.npy"
 
 training_settings:
-  # Имя файла с предобработанными данными (вход для этого скрипта)
-  # Если не указано, будет взято из preprocessing_settings.processed_output_filename
-  # input_processed_filename: "processed_metrics_data.parquet"
-
-  # Имя файла для сохранения обученной модели
-  model_output_filename: "lstm_autoencoder_model.keras" # Используем новый формат .keras
-
-  # Длина последовательности (окна) для LSTM
-  # Например, если ваши данные имеют шаг 30 секунд, 20 шагов = 10 минут данных в одной последовательности
+  # --- Общие параметры для обеих моделей ---
+  # input_processed_filename: "processed_metrics_data.parquet" # Используется, если train_on_filtered_sequences = false
+  model_output_filename: "lstm_autoencoder_model_A.keras"      # Имя для модели, обученной на всех данных (Модель А)
   sequence_length: 20
-
-  # Доля данных для обучающей выборки (остальное пойдет на валидацию)
   train_split_ratio: 0.8
-
-  # Параметры обучения
   epochs: 50
-  batch_size: 64 # Обычно степень двойки
+  batch_size: 64
   learning_rate: 0.001
-
-  # Параметры для EarlyStopping (опционально, но рекомендуется)
-  # 0 или null для отключения
-  early_stopping_patience: 10 # Сколько эпох ждать улучшения перед остановкой
-
-  # Параметры архитектуры (можно будет усложнить позже)
-  # Количество юнитов в первом LSTM слое кодировщика
+  early_stopping_patience: 10
   lstm_units_encoder1: 64
-  # Количество юнитов во втором LSTM слое кодировщика (латентное представление)
   lstm_units_encoder2_latent: 32
-  # Количество юнитов в первом LSTM слое декодировщика
   lstm_units_decoder1: 32
-  # Количество юнитов во втором LSTM слое декодировщика
   lstm_units_decoder2: 64
+
+  # --- Параметры для обучения на отфильтрованных "нормальных" последовательностях (Модель B) ---
+  # Установите в true, чтобы обучить модель на отфильтрованных данных
+  train_on_filtered_sequences: false # ИЗМЕНИТЕ НА true ДЛЯ ОБУЧЕНИЯ МОДЕЛИ B
+
+  # Имя файла с отфильтрованными нормальными последовательностями (из data_filtering_settings)
+  # Если не указано, будет взято из data_filtering_settings.normal_sequences_output_filename
+  # filtered_normal_sequences_input_filename: "normal_sequences.npy"
+
+  # Имя файла для сохранения модели, обученной на очищенных данных (Модель B)
+  filtered_model_output_filename: "lstm_autoencoder_model_B_cleaned.keras"
+
 
 real_time_anomaly_detection:
   # Как часто (в секундах) опрашивать Prometheus и выполнять детекцию
@@ -100,7 +103,10 @@ real_time_anomaly_detection:
   # гистограммы ошибок на валидационных/тестовых "нормальных" данных.
   # Например, 95-й или 99-й перцентиль этих ошибок.
   # Пока что это значение - ЗАГЛУШКА.
-  anomaly_threshold_mse: 0.0025 # Пример, требует точной настройки!
+  # Пример, требует точной настройки!
+  anomaly_threshold_mse_model_a: 0.0025 # Пример для Модели A
+  anomaly_threshold_mse_model_b: 0.0020 # Пример для Модели B (может быть ниже, т.к. обучалась на "чистых" данных)
+
 
   # Порт, на котором будет работать Prometheus exporter этого модуля
   exporter_port: 8901 # Убедитесь, что порт не занят

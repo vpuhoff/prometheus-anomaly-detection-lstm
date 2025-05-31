@@ -1,16 +1,32 @@
 # Prometheus Time Series Anomaly Detection with LSTM Autoencoder
 
-This project implements a system for detecting anomalies in time series data collected from Prometheus. It uses an LSTM (Long Short-Term Memory) autoencoder model built with TensorFlow/Keras to learn normal patterns from your metrics and identify deviations. The system includes scripts for data collection, preprocessing, model training, and real-time anomaly detection with results exposed via a Prometheus exporter.
+This project implements a system for detecting anomalies in time series data collected from Prometheus. It uses an LSTM (Long Short-Term Memory) autoencoder model built with TensorFlow/Keras to learn normal patterns from your metrics and identify deviations. The system includes scripts for data collection, preprocessing, model training (including an optional second model trained on "cleaned" data), data filtering, and real-time anomaly detection with two models running concurrently, exposing their results via a Prometheus exporter.
 
 ## Features
 
 * **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries.
 * **Preprocessing:** Handles missing values and normalizes/scales data for optimal model training.
-* **LSTM Autoencoder Training:** Trains an LSTM autoencoder model to learn representations of normal metric behavior.
-* **Real-time Anomaly Detection:** Continuously monitors new data, preprocesses it, and uses the trained model to detect anomalies.
-* **Prometheus Exporter Integration:** Exposes key anomaly detection metrics (e.g., reconstruction error, anomaly flag, per-feature errors) that can be scraped by another Prometheus instance or monitored with tools like Grafana.
+* **LSTM Autoencoder Training (Two-Model Strategy):**
+    * Trains an initial LSTM autoencoder (Model A) on the full preprocessed dataset.
+    * Optionally trains a second LSTM autoencoder (Model B) on a "cleaned" dataset, from which anomalies identified by Model A have been filtered out.
+* **Data Filtering:** A script to apply the trained Model A to filter out anomalous sequences from a dataset.
+* **Real-time Anomaly Detection:** Continuously monitors new data, preprocesses it, and uses *both* trained models (Model A and Model B) simultaneously to detect anomalies.
+* **Prometheus Exporter Integration:** Exposes key anomaly detection metrics separately for each model (e.g., reconstruction error, anomaly flag, per-feature errors) that can be scraped by Prometheus and monitored with tools like Grafana.
 * **Configurable:** All stages are highly configurable via a central `config.yaml` file.
 
+## Project Structure
+
+```
+.
+├── config.yaml                 # Central configuration file for all scripts
+├── data_collector.py           # Script to collect historical data from Prometheus
+├── preprocess_data.py          # Script to preprocess the collected data
+├── train_autoencoder.py        # Script to train LSTM autoencoder models (handles both initial and cleaned data training)
+├── filter_anomalous_data.py    # Script to filter data using a trained model to separate normal/anomalous sequences
+├── realtime_detector.py        # Script for real-time anomaly detection using two models and Prometheus exporter
+├── requirements.txt            # Python dependencies
+└── README.md                   # This file
+```
 
 ## Prerequisites
 
@@ -49,118 +65,125 @@ This project implements a system for detecting anomalies in time series data col
 
 ## Configuration (`config.yaml`)
 
-The `config.yaml` file is central to running this project. It's divided into sections for each stage:
+The `config.yaml` file is central to running this project. Key sections include:
 
-* **`prometheus_url`**: URL of your Prometheus server (e.g., `http://localhost:9090`).
-* **`queries`**: A dictionary where keys are friendly names (used as column names and feature labels) and values are the PromQL queries.
-    *Example:*
-    ```yaml
-    queries:
-      virtual_memory_free_bytes: 'windows_os_virtual_memory_free_bytes{job="Windows Exporter"}'
-      system_threads: 'windows_system_threads{job="Windows Exporter"}'
-    ```
-* **`data_settings`**: Parameters for the `data_collector.py` script.
-    * `collection_period_hours`: How many hours of historical data to fetch.
-    * `step`: The query resolution (e.g., `30s`, `1m`).
-    * `output_filename`: Name of the Parquet file to save collected data.
-* **`preprocessing_settings`**: Parameters for `preprocess_data.py`.
-    * `nan_fill_strategy`: Method to handle missing values (e.g., `ffill_then_bfill`).
-    * `scaler_type`: Type of scaler to use (`MinMaxScaler` or `StandardScaler`).
-    * `processed_output_filename`: Output file for processed data.
-    * `scaler_output_filename`: File to save the fitted scaler.
+* **`prometheus_url`**: URL of your Prometheus server.
+* **`queries`**: Dictionary of PromQL queries with friendly aliases.
+* **`data_settings`**: Parameters for `data_collector.py` (e.g., `collection_period_hours`, `step`, `output_filename`).
+* **`preprocessing_settings`**: Parameters for `preprocess_data.py` (e.g., `nan_fill_strategy`, `scaler_type`, `processed_output_filename`, `scaler_output_filename`).
 * **`training_settings`**: Parameters for `train_autoencoder.py`.
-    * `model_output_filename`: File to save the trained Keras model.
-    * `sequence_length`: Number of time steps in each input sequence for the LSTM.
-    * `train_split_ratio`: Proportion of data for training.
-    * `epochs`, `batch_size`, `learning_rate`: Standard training hyperparameters.
-    * `early_stopping_patience`: Patience for early stopping (0 to disable).
-    * `lstm_units_encoder1`, `lstm_units_encoder2_latent`, etc.: Define the LSTM autoencoder architecture.
+    * `model_output_filename`: Filename for Model A (trained on all data).
+    * `sequence_length`, `train_split_ratio`, `epochs`, `batch_size`, `learning_rate`, `early_stopping_patience`: Standard training hyperparameters.
+    * `lstm_units_encoder1`, etc.: LSTM autoencoder architecture definition.
+    * `train_on_filtered_sequences`: Set to `true` to train Model B.
+    * `filtered_normal_sequences_input_filename`: Input `.npy` file of normal sequences for training Model B (typically output from `filter_anomalous_data.py`).
+    * `filtered_model_output_filename`: Filename for Model B (trained on cleaned data).
+* **`data_filtering_settings`**: Parameters for `filter_anomalous_data.py`.
+    * `normal_sequences_output_filename`: Output file for sequences classified as normal by Model A.
+    * `anomalous_sequences_output_filename`: Output file for sequences classified as anomalous by Model A.
 * **`real_time_anomaly_detection`**: Parameters for `realtime_detector.py`.
-    * `query_interval_seconds`: How often to fetch new data and run detection.
-    * `anomaly_threshold_mse`: **Crucial parameter!** This Mean Squared Error threshold determines if a reconstruction is considered anomalous. It needs to be carefully tuned based on the histogram of reconstruction errors on your normal validation data (see `reconstruction_error_validation_histogram.png` generated by `train_autoencoder.py`).
-    * `exporter_port`: Port for the Prometheus exporter of this detector.
-    * `metrics_prefix`: Prefix for metrics exposed by the detector.
+    * `query_interval_seconds`: How often to fetch new data.
+    * `anomaly_threshold_mse_model_a`: **Crucial!** MSE threshold for Model A. Tune based on Model A's validation error histogram.
+    * `anomaly_threshold_mse_model_b`: **Crucial!** MSE threshold for Model B. Tune based on Model B's validation error histogram.
+    * `exporter_port`: Port for the Prometheus exporter.
+    * `metrics_prefix`: Prefix for exposed Prometheus metrics.
 
-**Before running any script, review and customize `config.yaml` to match your environment and data.**
+**Before running any script, review and customize `config.yaml` thoroughly.**
 
 ## Usage / Workflow
 
 The project follows a sequential workflow:
 
-**Step 1: Data Collection**
+**Step 1: Data Collection (`data_collector.py`)**
 Collect historical data from your Prometheus instance.
 ```bash
 python data_collector.py
-````
+```
+Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`).
 
-This will create a Parquet file (e.g., `prometheus_metrics_data.parquet`) as specified in `config.yaml`.
-
-**Step 2: Data Preprocessing**
+**Step 2: Data Preprocessing (`preprocess_data.py`)**
 Preprocess the collected data (handles NaNs, scales features).
-
 ```bash
 python preprocess_data.py
 ```
+Outputs: Processed data Parquet file (e.g., `processed_metrics_data.parquet`) and a saved scaler (e.g., `fitted_scaler.joblib`).
 
-This generates a processed Parquet file (e.g., `processed_metrics_data.parquet`) and saves the scaler (e.g., `fitted_scaler.joblib`).
-
-**Step 3: Model Training**
-Train the LSTM autoencoder model on the preprocessed data.
-
+**Step 3: Train Initial Model - Model A (`train_autoencoder.py`)**
+Train the first LSTM autoencoder (Model A) on the full preprocessed dataset.
+* In `config.yaml` (`training_settings`):
+    * Set `train_on_filtered_sequences: false`.
+    * Configure `model_output_filename` (e.g., `lstm_autoencoder_model_A.keras`).
 ```bash
 python train_autoencoder.py
 ```
+Outputs: Trained Model A (e.g., `lstm_autoencoder_model_A.keras`), training history plots. Use the `reconstruction_error_histogram_...A.png` to help determine `anomaly_threshold_mse_model_a` in `config.yaml`.
 
-This saves the trained model (e.g., `lstm_autoencoder_model.keras`) and generates plots for training history and reconstruction error distribution. Use the `reconstruction_error_validation_histogram.png` to help determine a suitable `anomaly_threshold_mse` for `config.yaml`.
+**Step 4: Filter Data (Optional, for Model B) (`filter_anomalous_data.py`)**
+Use the trained Model A to classify sequences in your preprocessed dataset as "normal" or "anomalous".
+* Ensure `anomaly_threshold_mse` (from `real_time_anomaly_detection` section, used by this script as the threshold for Model A) is appropriately set in `config.yaml`.
+* Configure output filenames in `data_filtering_settings`.
+```bash
+python filter_anomalous_data.py
+```
+Outputs: `.npy` files for normal sequences (e.g., `normal_sequences.npy`) and anomalous sequences.
 
-**Step 4: Real-time Anomaly Detection**
-Run the real-time detector. This script will continuously fetch new data, process it, and check for anomalies.
+**Step 5: Train Cleaned Model - Model B (Optional) (`train_autoencoder.py`)**
+Train the second LSTM autoencoder (Model B) on the "normal" sequences identified in Step 4.
+* In `config.yaml` (`training_settings`):
+    * Set `train_on_filtered_sequences: true`.
+    * Set `filtered_normal_sequences_input_filename` to the output from Step 4 (e.g., `normal_sequences.npy`).
+    * Configure `filtered_model_output_filename` (e.g., `lstm_autoencoder_model_B_cleaned.keras`).
+    * Ensure other training parameters (architecture, epochs etc.) are set for a fair comparison if desired.
+```bash
+python train_autoencoder.py
+```
+Outputs: Trained Model B (e.g., `lstm_autoencoder_model_B_cleaned.keras`), training history plots. Use its `reconstruction_error_histogram_...B_cleaned.png` to help determine `anomaly_threshold_mse_model_b` in `config.yaml`.
 
+**Step 6: Real-time Anomaly Detection (`realtime_detector.py`)**
+Run the real-time detector, which now uses both Model A and Model B concurrently.
+* Ensure `model_output_filename` (for Model A) and `filtered_model_output_filename` (for Model B) in `training_settings` point to your trained models.
+* Ensure `anomaly_threshold_mse_model_a` and `anomaly_threshold_mse_model_b` in `real_time_anomaly_detection` are correctly set.
 ```bash
 python realtime_detector.py
 ```
+The detector starts a Prometheus exporter (e.g., on `http://localhost:8001/metrics`).
 
-The detector will start a Prometheus exporter on the port specified in `config.yaml` (e.g., `http://localhost:8001/metrics`).
-
-**Step 5: Monitoring (Prometheus & Grafana)**
-Configure another Prometheus instance (or your main one) to scrape the metrics endpoint exposed by `realtime_detector.py`. You can then use Grafana or Prometheus's own UI to visualize:
-
-  * `anomaly_detector_latest_reconstruction_error_mse`
-  * `anomaly_detector_is_anomaly_detected` (0 for normal, 1 for anomaly)
-  * `anomaly_detector_total_anomalies_count`
-  * `anomaly_detector_feature_reconstruction_error_mse{feature_name="your_metric_alias"}` (per-feature errors)
+**Step 7: Monitoring (Prometheus & Grafana)**
+Configure Prometheus to scrape the metrics endpoint from `realtime_detector.py`. Visualize metrics like:
+* `anomaly_detector_latest_reconstruction_error_mse{model_id="A"}`
+* `anomaly_detector_latest_reconstruction_error_mse{model_id="B"}`
+* `anomaly_detector_is_anomaly_detected{model_id="A"}`
+* `anomaly_detector_is_anomaly_detected{model_id="B"}`
+* `anomaly_detector_total_anomalies_count_total{model_id="A"}`
+* `anomaly_detector_total_anomalies_count_total{model_id="B"}`
+* `anomaly_detector_feature_reconstruction_error_mse{model_id="A", feature_name="your_alias"}`
+* `anomaly_detector_feature_reconstruction_error_mse{model_id="B", feature_name="your_alias"}`
 
 ## Interpreting Results
 
-  * **Overall Anomaly Flag:** The `anomaly_detector_is_anomaly_detected` metric gives a quick overview.
-  * **Reconstruction Error:** Monitor `anomaly_detector_latest_reconstruction_error_mse`. Spikes above your defined threshold indicate potential anomalies.
-  * **Per-Feature Errors:** When an anomaly is detected, check the logs of `realtime_detector.py` for a breakdown of reconstruction errors per feature. Additionally, the `anomaly_detector_feature_reconstruction_error_mse{feature_name="..."}` metrics in Prometheus show which specific time series contributed most to the high reconstruction error, aiding in diagnosing the root cause.
+* **Compare Models:** Observe the `is_anomaly_detected` and `latest_reconstruction_error_mse` metrics for both Model A and Model B in real-time. This helps understand if training on "cleaned" data (Model B) yields different or more desirable detection behavior.
+* **Per-Feature Errors:** When an anomaly is flagged by either model, check the corresponding `feature_reconstruction_error_mse` metrics (and logs of `realtime_detector.py`) to see which specific time series (features) are contributing most to the anomaly.
 
 ## Customization & Extending
 
-  * **Monitoring New Metrics:** Add new PromQL queries and friendly aliases to the `queries` section in `config.yaml`. You will need to retrain the model (Steps 1-3) to include these new metrics.
-  * **Adjusting Time Windows:** Modify `collection_period_hours` (for historical data) and `sequence_length` (for model input) in `config.yaml`.
-  * **Tuning Anomaly Threshold:** The `anomaly_threshold_mse` in `config.yaml` is critical. Adjust it based on the model's performance on your validation data and your tolerance for false positives/negatives.
-  * **Model Architecture:** The LSTM autoencoder architecture can be modified within `train_autoencoder.py` (in the `build_lstm_autoencoder` function) or by making more parameters configurable in `config.yaml` under `training_settings`.
-  * **Data Fetching in Real-time:** The `_fetch_data_window` method in `realtime_detector.py` can be adjusted if you have specific needs for how fresh data is queried.
+* **Monitoring New Metrics:** Add PromQL queries to `config.yaml`. Retrain models (all relevant steps) to include these.
+* **Tuning Anomaly Thresholds:** The `anomaly_threshold_mse_model_a` and `anomaly_threshold_mse_model_b` are critical. Adjust them based on model performance and desired sensitivity.
+* **Model Architecture:** Modify LSTM parameters in `training_settings` of `config.yaml`.
+* **Experimentation:** Use the `filter_anomalous_data.py` script with different thresholds for Model A to generate various "cleaned" datasets for training Model B.
 
 ## Troubleshooting
 
-  * **Python Dependencies:** Ensure all packages in `requirements.txt` are installed in your active Python environment.
-  * **Prometheus Connection:** Verify the `prometheus_url` in `config.yaml` is correct and your Prometheus server is accessible. Check Prometheus logs if data isn't being fetched.
-  * **Data Issues:**
-      * If `data_collector.py` or `realtime_detector.py` report "No data found," check your PromQL queries and ensure Prometheus is scraping the target metrics.
-      * NaN issues after preprocessing: Review the `nan_fill_strategy` or inspect raw data for large gaps.
-  * **Model Training:**
-      * If loss doesn't decrease: try adjusting `learning_rate`, `batch_size`, model architecture, or ensure data is properly scaled.
-      * Overfitting: If validation loss consistently increases while training loss decreases, try adding more regularization (e.g., Dropout layers), getting more data, or simplifying the model. `EarlyStopping` is enabled by default to help with this.
-  * **Port in Use:** If `realtime_detector.py` fails to start the exporter, the specified `exporter_port` might be in use. Choose a different port in `config.yaml`.
+* **Python Dependencies:** Ensure `requirements.txt` is up-to-date and packages are installed.
+* **Prometheus Connection:** Verify `prometheus_url` and query validity.
+* **Data Issues:** Check for "No data found" errors; inspect PromQL queries and Prometheus scrape targets. Review `nan_fill_strategy` if NaNs persist.
+* **Model Training:** If loss doesn't decrease, adjust learning rate, batch size, or architecture. For overfitting, utilize `EarlyStopping` or consider more data/regularization.
+* **File Not Found:** Double-check filenames in `config.yaml` against actual generated files (models, scalers, datasets).
+* **Port in Use:** If `realtime_detector.py` fails, the `exporter_port` might be occupied.
 
 ## Contributing
 
-Contributions are welcome\! Please feel free to open an issue or submit a pull request.
-(Consider adding more specific guidelines if you wish, e.g., for coding style, testing.)
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
 
 ## License
 
-This project is licensed under the MIT License
+This project is licensed under the MIT License.
