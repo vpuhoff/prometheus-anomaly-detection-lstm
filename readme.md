@@ -14,6 +14,8 @@ This project implements a system for detecting anomalies in time series data col
 * **Prometheus Exporter Integration:** Exposes key anomaly detection metrics separately for each model (e.g., reconstruction error, anomaly flag, per-feature errors) that can be scraped by Prometheus and monitored with tools like Grafana.
 * **Configurable:** All stages are highly configurable via a central `config.yaml` file.
 
+![example graphics](example.png)
+
 ## Project Structure
 
 ```
