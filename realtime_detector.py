@@ -39,15 +39,13 @@ class RealtimeAnomalyDetector:
         self.exporter_port = rt_config.get('exporter_port', 8001)
         self.metrics_prefix = rt_config.get('metrics_prefix', 'anomaly_detector_')
 
-        self.anomaly_threshold_a = rt_config.get('anomaly_threshold_mse_model_a', 0.0025)
-        self.anomaly_threshold_b = rt_config.get('anomaly_threshold_mse_model_b', 0.0020)
+        self.anomaly_threshold = rt_config.get('anomaly_threshold_mse', 0.0025)
 
         preprocess_config = self.config.get('preprocessing_settings', {})
         training_config = self.config.get('training_settings', {})
         
         scaler_filename = preprocess_config.get('scaler_output_filename', 'fitted_scaler.joblib')
-        model_a_filename = training_config.get('model_output_filename', 'lstm_autoencoder_model_A.keras')
-        model_b_filename = training_config.get('filtered_model_output_filename', 'lstm_autoencoder_model_B_cleaned.keras')
+        model_a_filename = training_config.get('model_output_filename', 'lstm_autoencoder_model.keras')
         self.sequence_length = training_config.get('sequence_length', 20)
 
         data_s_config = self.config.get('data_settings',{})
@@ -56,13 +54,10 @@ class RealtimeAnomalyDetector:
         base_dir = Path(__file__).resolve().parent
         self.scaler_path = base_dir / scaler_filename
         self.model_a_path = base_dir / model_a_filename
-        self.model_b_path = base_dir / model_b_filename
 
         self.scaler = self._load_scaler()
-        logging.info("Загрузка Модели A...")
-        self.model_a = self._load_tf_model(self.model_a_path, "Модель A")
-        logging.info("Загрузка Модели B...")
-        self.model_b = self._load_tf_model(self.model_b_path, "Модель B")
+        logging.info("Загрузка модели...")
+        self.model_a = self._load_tf_model(self.model_a_path, "Модель")
         
         if self.scaler:
             self.num_features = self.scaler.n_features_in_
@@ -178,8 +173,8 @@ class RealtimeAnomalyDetector:
                PROM_TOTAL_ANOMALIES_COUNT, PROM_LAST_SUCCESSFUL_RUN_TIMESTAMP_SECONDS, \
                PROM_DATA_POINTS_IN_CURRENT_WINDOW, PROM_FEATURE_RECONSTRUCTION_ERROR_MSE
         
-        model_id_label_list = ['model_id']
-        feature_error_label_list = ['model_id', 'feature_name']
+        model_id_label_list = []
+        feature_error_label_list = ['feature_name']
         metric_definitions = {
             'latest_reconstruction_error_mse': ('MSE ошибка реконструкции для последнего окна', model_id_label_list, Gauge),
             'is_anomaly_detected': ('Флаг аномалии (1 если аномалия, 0 если норма)', model_id_label_list, Gauge),
@@ -200,28 +195,27 @@ class RealtimeAnomalyDetector:
             if metric_type == Gauge: globals()[global_var_name] = Gauge(full_name, doc, labelnames=current_labels)
             elif metric_type == Counter: globals()[global_var_name] = Counter(full_name, doc, labelnames=current_labels)
         logging.info("Prometheus метрики инициализированы.")
-        if PROM_TOTAL_ANOMALIES_COUNT: # Инициализация счетчиков
+        if PROM_TOTAL_ANOMALIES_COUNT:
             try:
-                PROM_TOTAL_ANOMALIES_COUNT.labels(model_id="A").inc(0)
-                PROM_TOTAL_ANOMALIES_COUNT.labels(model_id="B").inc(0)
-                logging.info("Счетчики total_anomalies_count инициализированы.")
-            except Exception as e: logging.warning(f"Не удалось инициализировать счетчики: {e}")
+                PROM_TOTAL_ANOMALIES_COUNT.inc(0)
+                logging.info("Счетчик total_anomalies_count инициализирован.")
+            except Exception as e: logging.warning(f"Не удалось инициализировать счетчик: {e}")
 
 
-    def _process_model_output(self, model, model_id_label: str, sequence_to_predict: np.ndarray, threshold: float):
+    def _process_model_output(self, model, sequence_to_predict: np.ndarray, threshold: float):
         # Используем ИСПРАВЛЕННЫЕ имена глобальных переменных метрик
-        if model is None: 
-            logging.warning(f"Модель {model_id_label} не загружена.")
-            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label).set(0)
-            if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.labels(model_id=model_id_label).set(0)
+        if model is None:
+            logging.warning("Модель не загружена.")
+            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.set(0)
+            if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.set(0)
             if PROM_FEATURE_RECONSTRUCTION_ERROR_MSE:
-                for fnk in self.metric_columns_ordered: PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label,feature_name=fnk).set(0)
+                for fnk in self.metric_columns_ordered: PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(feature_name=fnk).set(0)
             return
         try:
             reconstructed_sequence = model.predict(sequence_to_predict, verbose=0)
             mse = np.mean(np.power(sequence_to_predict - reconstructed_sequence, 2))
-            logging.info(f"[{model_id_label}] Общая MSE: {mse:.6f}")
-            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label).set(mse)
+            logging.info(f"MSE: {mse:.6f}")
+            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.set(mse)
             
             sq_err_elems = np.power(sequence_to_predict[0] - reconstructed_sequence[0], 2)
             mse_per_feature = np.mean(sq_err_elems, axis=0)
@@ -229,26 +223,26 @@ class RealtimeAnomalyDetector:
                 for i, fnk in enumerate(self.metric_columns_ordered):
                     try:
                         cfm = mse_per_feature[i]
-                        PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label,feature_name=fnk).set(cfm)
-                        if mse > threshold*0.5 or cfm > threshold*0.5: logging.info(f"[{model_id_label}] Ошибка '{fnk}': {cfm:.6f}")
-                    except Exception as e: logging.error(f"[{model_id_label}] Ошибка уст. метрики для '{fnk}': {e}")
+                        PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(feature_name=fnk).set(cfm)
+                        if mse > threshold*0.5 or cfm > threshold*0.5: logging.info(f"Ошибка '{fnk}': {cfm:.6f}")
+                    except Exception as e: logging.error(f"Ошибка уст. метрики для '{fnk}': {e}")
             is_anomaly = mse > threshold
             if is_anomaly:
-                logging.warning(f"!!! [{model_id_label}] АНОМАЛИЯ !!! MSE: {mse:.6f} > Порог: {threshold:.6f}")
-                if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.labels(model_id=model_id_label).set(1)
-                if PROM_TOTAL_ANOMALIES_COUNT: PROM_TOTAL_ANOMALIES_COUNT.labels(model_id=model_id_label).inc()
-                fer = [f"[{model_id_label}] Ошибки по признакам (аномалия):"]
+                logging.warning(f"!!! АНОМАЛИЯ !!! MSE: {mse:.6f} > Порог: {threshold:.6f}")
+                if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.set(1)
+                if PROM_TOTAL_ANOMALIES_COUNT: PROM_TOTAL_ANOMALIES_COUNT.inc()
+                fer = ["Ошибки по признакам (аномалия):"]
                 for i, fnk in enumerate(self.metric_columns_ordered): fer.append(f"  - '{fnk}': {mse_per_feature[i]:.6f}")
                 logging.warning("\n".join(fer))
             else:
-                logging.info(f"[{model_id_label}] Норма. MSE: {mse:.6f} <= Порог: {threshold:.6f}")
-                if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.labels(model_id=model_id_label).set(0)
+                logging.info(f"Норма. MSE: {mse:.6f} <= Порог: {threshold:.6f}")
+                if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.set(0)
         except Exception as e:
-            logging.error(f"[{model_id_label}] Ошибка предсказания: {e}", exc_info=True)
-            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label).set(-1)
-            if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.labels(model_id=model_id_label).set(0)
+            logging.error(f"Ошибка предсказания: {e}", exc_info=True)
+            if PROM_LATEST_RECONSTRUCTION_ERROR_MSE: PROM_LATEST_RECONSTRUCTION_ERROR_MSE.set(-1)
+            if PROM_IS_ANOMALY_DETECTED: PROM_IS_ANOMALY_DETECTED.set(0)
             if PROM_FEATURE_RECONSTRUCTION_ERROR_MSE:
-                for fnk in self.metric_columns_ordered: PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(model_id=model_id_label,feature_name=fnk).set(-1) 
+                for fnk in self.metric_columns_ordered: PROM_FEATURE_RECONSTRUCTION_ERROR_MSE.labels(feature_name=fnk).set(-1)
 
     def run_detection_cycle(self):
         logging.info("Начало цикла.")
@@ -257,25 +251,21 @@ class RealtimeAnomalyDetector:
         if PROM_DATA_POINTS_IN_CURRENT_WINDOW: PROM_DATA_POINTS_IN_CURRENT_WINDOW.set(len(current_window_df) if current_window_df is not None else 0)
         if current_window_df is None or current_window_df.empty:
             logging.warning("Нет данных для окна. Пропуск.")
-            self._process_model_output(None, "A", np.array([]), self.anomaly_threshold_a)
-            self._process_model_output(None, "B", np.array([]), self.anomaly_threshold_b)
+            self._process_model_output(None, np.array([]), self.anomaly_threshold)
             return
         sequence_to_predict = self._preprocess_and_create_sequence(current_window_df.copy())
         if sequence_to_predict is None:
             logging.warning("Не удалось предобработать данные. Пропуск.")
-            self._process_model_output(None, "A", np.array([]), self.anomaly_threshold_a)
-            self._process_model_output(None, "B", np.array([]), self.anomaly_threshold_b)
+            self._process_model_output(None, np.array([]), self.anomaly_threshold)
             return
-        logging.info("--- Обработка Моделью A ---")
-        self._process_model_output(self.model_a, "A", sequence_to_predict, self.anomaly_threshold_a)
-        logging.info("--- Обработка Моделью B ---")
-        self._process_model_output(self.model_b, "B", sequence_to_predict, self.anomaly_threshold_b)
+        logging.info("--- Обработка моделью ---")
+        self._process_model_output(self.model_a, sequence_to_predict, self.anomaly_threshold)
         if PROM_LAST_SUCCESSFUL_RUN_TIMESTAMP_SECONDS: PROM_LAST_SUCCESSFUL_RUN_TIMESTAMP_SECONDS.set_to_current_time()
         logging.info("Цикл завершен.")
 
     def start_server_and_loop(self):
-        if not self.scaler or (not self.model_a and not self.model_b) :
-             logging.error("Не загружен скейлер или обе модели. Запуск невозможен.")
+        if not self.scaler or not self.model_a:
+             logging.error("Не загружен скейлер или модель. Запуск невозможен.")
              exit(1)
         try: start_http_server(self.exporter_port); logging.info(f"Prometheus exporter на порту {self.exporter_port}")
         except OSError as e: 
