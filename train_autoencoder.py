@@ -100,10 +100,6 @@ if __name__ == "__main__":
     # Извлечение настроек
     preprocess_settings = CONFIG.get('preprocessing_settings', {})
     training_settings = CONFIG.get('training_settings', {})
-    data_filtering_settings = CONFIG.get('data_filtering_settings', {}) # Для имени файла с нормальными последовательностями
-
-    # Режим обучения
-    train_on_filtered = training_settings.get('train_on_filtered_sequences', False)
 
     # Общие параметры обучения
     sequence_length = training_settings.get('sequence_length', 20)
@@ -114,57 +110,28 @@ if __name__ == "__main__":
     early_stopping_patience = training_settings.get('early_stopping_patience', 0)
 
     # Определение входных данных и имени выходной модели
-    if train_on_filtered:
-        logging.info("РЕЖИМ ОБУЧЕНИЯ: на отфильтрованных 'нормальных' последовательностях (Модель B)")
-        input_sequences_filename = training_settings.get('filtered_normal_sequences_input_filename',
-                                                   data_filtering_settings.get('normal_sequences_output_filename'))
-        if not input_sequences_filename:
-            logging.error("Имя файла с отфильтрованными нормальными последовательностями не указано в config.yaml "
-                          " (training_settings.filtered_normal_sequences_input_filename или data_filtering_settings.normal_sequences_output_filename).")
-            exit(1)
-        input_file_path = BASE_DIR / input_sequences_filename
-        X_all_sequences = load_sequences_npy(input_file_path)
-        model_output_filename = training_settings.get('filtered_model_output_filename', 'lstm_autoencoder_model_B_cleaned.keras')
-        
-        if X_all_sequences.shape[0] == 0:
-            logging.error(f"Загруженный NPY файл {input_file_path} не содержит последовательностей. Обучение невозможно.")
-            exit(1)
-        if X_all_sequences.ndim != 3:
-            logging.error(f"Ожидался 3D массив последовательностей из NPY, получено {X_all_sequences.ndim}D. Форма: {X_all_sequences.shape}")
-            exit(1)
-            
-        # sequence_length и num_features должны соответствовать данным в NPY
-        # Переопределяем sequence_length на основе загруженных данных для точности
-        loaded_sequence_length = X_all_sequences.shape[1]
-        if loaded_sequence_length != sequence_length:
-            logging.warning(f"Sequence_length из конфига ({sequence_length}) отличается от данных в NPY ({loaded_sequence_length}). "
-                            f"Используется значение из NPY: {loaded_sequence_length}")
-            sequence_length = loaded_sequence_length
-        num_features = X_all_sequences.shape[2]
+    logging.info("Режим обучения: на предобработанных данных")
+    input_parquet_filename = training_settings.get('input_processed_filename',
+                                                  preprocess_settings.get('processed_output_filename'))
+    if not input_parquet_filename:
+        logging.error("Имя файла с предобработанными данными Parquet не указано в config.yaml "
+                      "(training_settings.input_processed_filename или preprocessing_settings.processed_output_filename).")
+        exit(1)
+    input_file_path = BASE_DIR / input_parquet_filename
+    df_processed = load_processed_data_parquet(input_file_path)
 
-    else:
-        logging.info("РЕЖИМ ОБУЧЕНИЯ: на всех предобработанных данных (Модель A)")
-        input_parquet_filename = training_settings.get('input_processed_filename', 
-                                               preprocess_settings.get('processed_output_filename'))
-        if not input_parquet_filename:
-            logging.error("Имя файла с предобработанными данными Parquet не указано в config.yaml "
-                          "(training_settings.input_processed_filename или preprocessing_settings.processed_output_filename).")
-            exit(1)
-        input_file_path = BASE_DIR / input_parquet_filename
-        df_processed = load_processed_data_parquet(input_file_path)
-        
-        if df_processed.empty:
-            logging.error("Загруженный DataFrame для обучения пуст. Обучение невозможно.")
-            exit(1)
-        
-        num_features = df_processed.shape[1]
-        data_values = df_processed.values
-        X_all_sequences = create_sequences_from_df(data_values, sequence_length)
-        model_output_filename = training_settings.get('model_output_filename', 'lstm_autoencoder_model_A.keras')
+    if df_processed.empty:
+        logging.error("Загруженный DataFrame для обучения пуст. Обучение невозможно.")
+        exit(1)
 
-        if X_all_sequences.shape[0] == 0:
-            logging.error("Не удалось создать ни одной последовательности из Parquet данных. Обучение невозможно.")
-            exit(1)
+    num_features = df_processed.shape[1]
+    data_values = df_processed.values
+    X_all_sequences = create_sequences_from_df(data_values, sequence_length)
+    model_output_filename = training_settings.get('model_output_filename', 'lstm_autoencoder_model.keras')
+
+    if X_all_sequences.shape[0] == 0:
+        logging.error("Не удалось создать ни одной последовательности из Parquet данных. Обучение невозможно.")
+        exit(1)
 
     model_output_path = BASE_DIR / model_output_filename
     logging.info(f"Модель будет сохранена в: {model_output_path}")
@@ -221,10 +188,8 @@ if __name__ == "__main__":
     
     # ModelCheckpoint для сохранения лучшей модели (опционально, но полезно)
     checkpoint_dir = BASE_DIR / "model_checkpoints"
-    checkpoint_dir.mkdir(parents=True, exist_ok=True) # Создаем директорию, если ее нет
-    # Добавляем суффикс к имени чекпоинта в зависимости от режима
-    checkpoint_suffix = "_cleaned" if train_on_filtered else "_full"
-    checkpoint_filepath = checkpoint_dir / f"best_model{checkpoint_suffix}.keras"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_filepath = checkpoint_dir / "best_model.keras"
     
     model_checkpoint_callback = ModelCheckpoint(
         filepath=checkpoint_filepath,

@@ -68,9 +68,9 @@ data_filtering_settings:
   # all_sequence_errors_output_filename: "all_sequence_errors.npy"
 
 training_settings:
-  # --- Общие параметры для обеих моделей ---
-  # input_processed_filename: "processed_metrics_data.parquet" # Используется, если train_on_filtered_sequences = false
-  model_output_filename: "lstm_autoencoder_model_A.keras"      # Имя для модели, обученной на всех данных (Модель А)
+  # Общие параметры обучения
+  # input_processed_filename: "processed_metrics_data.parquet"
+  model_output_filename: "lstm_autoencoder_model.keras"
   sequence_length: 20
   train_split_ratio: 0.8
   epochs: 50
@@ -81,17 +81,6 @@ training_settings:
   lstm_units_encoder2_latent: 32
   lstm_units_decoder1: 32
   lstm_units_decoder2: 64
-
-  # --- Параметры для обучения на отфильтрованных "нормальных" последовательностях (Модель B) ---
-  # Установите в true, чтобы обучить модель на отфильтрованных данных
-  train_on_filtered_sequences: false # ИЗМЕНИТЕ НА true ДЛЯ ОБУЧЕНИЯ МОДЕЛИ B
-
-  # Имя файла с отфильтрованными нормальными последовательностями (из data_filtering_settings)
-  # Если не указано, будет взято из data_filtering_settings.normal_sequences_output_filename
-  # filtered_normal_sequences_input_filename: "normal_sequences.npy"
-
-  # Имя файла для сохранения модели, обученной на очищенных данных (Модель B)
-  filtered_model_output_filename: "lstm_autoencoder_model_B_cleaned.keras"
 
 
 real_time_anomaly_detection:
@@ -104,8 +93,7 @@ real_time_anomaly_detection:
   # Например, 95-й или 99-й перцентиль этих ошибок.
   # Пока что это значение - ЗАГЛУШКА.
   # Пример, требует точной настройки!
-  anomaly_threshold_mse_model_a: 0.0025 # Пример для Модели A
-  anomaly_threshold_mse_model_b: 0.0020 # Пример для Модели B (может быть ниже, т.к. обучалась на "чистых" данных)
+  anomaly_threshold_mse: 0.0025
 
 
   # Порт, на котором будет работать Prometheus exporter этого модуля
