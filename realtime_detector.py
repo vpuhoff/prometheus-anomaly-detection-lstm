@@ -185,6 +185,16 @@ class RealtimeAnomalyDetector:
         try:
             final_df = pd.concat(all_metric_dfs, axis=1, join='inner')
             if len(final_df) >= self.sequence_length:
+                if final_df.empty:
+                    logging.warning("Итоговый DataFrame пуст.")
+                    return None
+                try:
+                    final_df = final_df[self.metric_columns_ordered]
+                except KeyError as e:
+                    logging.error(
+                        f"Ошибка порядка колонок: {e}. Ожид: {self.metric_columns_ordered}. Получ: {final_df.columns.tolist()}")
+                    return None
+                    
                 return final_df.tail(self.sequence_length)
             else:
                 logging.warning(f"Недостаточно данных ({len(final_df)}) для посл. ({self.sequence_length}).")
@@ -193,23 +203,6 @@ class RealtimeAnomalyDetector:
                 return None
         except Exception as e:
             logging.error(f"Ошибка объединения DataFrame: {e}", exc_info=True)
-            return None
-        if final_df.empty:
-            logging.warning("Итоговый DataFrame пуст.")
-            return None
-        try:
-            final_df = final_df[self.metric_columns_ordered]
-        except KeyError as e:
-            logging.error(
-                f"Ошибка порядка колонок: {e}. Ожид: {self.metric_columns_ordered}. Получ: {final_df.columns.tolist()}")
-            return None
-        if len(final_df) >= self.sequence_length:
-            return final_df.tail(self.sequence_length)
-        else:
-            logging.warning(
-                f"Недостаточно данных ({len(final_df)}) для посл. ({self.sequence_length}).")
-            if PROM_DATA_POINTS_IN_CURRENT_WINDOW:
-                PROM_DATA_POINTS_IN_CURRENT_WINDOW.set(len(final_df))
             return None
 
     def _preprocess_and_create_sequence(self, df: pd.DataFrame) -> np.ndarray | None:

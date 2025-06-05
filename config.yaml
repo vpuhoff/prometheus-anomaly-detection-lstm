@@ -6,12 +6,21 @@ prometheus_url: "http://127.0.0.1:9090"
 queries:
   virtual_memory_free_bytes: 'windows_os_virtual_memory_free_bytes{job="Windows Exporter"}'
   system_threads: 'windows_system_threads{job="Windows Exporter"}'
-  network_received_bytes_total: 'rate(windows_net_bytes_received_total{job="Windows Exporter"}[1m])'
   nvidia_smi_utilization_memory_ratio: nvidia_smi_utilization_memory_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
   nvidia_smi_utilization_gpu_ratio: nvidia_smi_utilization_gpu_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
   nvidia_smi_temperature_gpu: nvidia_smi_temperature_gpu{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
   nvidia_smi_power_draw_watts: nvidia_smi_power_draw_watts{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
   nvidia_smi_fan_speed_ratio: nvidia_smi_fan_speed_ratio{uuid="3714246e-aa22-1cf2-db00-bec4cab286ac"}
+  cpu_usage_total_non_idle: 'sum by (instance, job) (rate(windows_cpu_time_total{mode!="idle", job=~"Windows Exporter|WMI Exporter"}[1m]))'
+  system_processor_queue_length: 'windows_system_processor_queue_length{job="Windows Exporter"}'
+  physical_memory_free_bytes: 'windows_os_physical_memory_free_bytes{job=~"Windows Exporter|WMI Exporter"}'
+  network_packets_received_discarded_total: 'rate(windows_net_packets_received_discarded_total{job="Windows Exporter"}[1m])'
+  network_packets_outbound_discarded_total: 'rate(windows_net_packets_outbound_discarded_total{job="Windows Exporter"}[1m])'
+  network_packets_received_errors_total: 'rate(windows_net_packets_received_errors_total{job="Windows Exporter"}[1m])'
+  network_packets_outbound_errors_total: 'rate(windows_net_packets_outbound_errors_total{job="Windows Exporter"}[1m])'
+  system_context_switches_rate: 'rate(windows_system_context_switches_total{job="Windows Exporter"}[1m])'
+  system_calls_rate: 'rate(windows_system_system_calls_total{job="Windows Exporter"}[1m])'
+  thermalzone_temperature_celsius: 'windows_thermalzone_temperature_celsius{job=~"Windows Exporter|WMI Exporter"}'
 
 # Настройки сбора данных
 data_settings:
@@ -85,7 +94,7 @@ training_settings:
 
 real_time_anomaly_detection:
   # Как часто (в секундах) опрашивать Prometheus и выполнять детекцию
-  query_interval_seconds: 10
+  query_interval_seconds: 30
 
   # Порог ошибки реконструкции (MSE) для объявления аномалии.
   # !!! ВАЖНО: Это значение нужно тщательно подобрать на основе анализа
