@@ -136,9 +136,12 @@ class RealtimeAnomalyDetector:
             return None
         step_seconds = self._td_seconds(self.data_step_duration_str)
         window_duration_seconds = self.sequence_length * step_seconds
-        end_time = datetime.now()
-        start_time_query = end_time - \
-            timedelta(seconds=window_duration_seconds + step_seconds * 2)
+        now_time = datetime.now()
+        # Округляем окончание окна до ближайшей границы шага
+        aligned_end_ts = int(now_time.timestamp()) // step_seconds * step_seconds
+        end_time = datetime.fromtimestamp(aligned_end_ts)
+        start_time_query = end_time - timedelta(
+            seconds=window_duration_seconds + step_seconds * 2)
         all_metric_dfs = []
         logging.info(
             f"Запрос данных: {start_time_query.strftime('%Y-%m-%d %H:%M:%S')} - {end_time.strftime('%Y-%m-%d %H:%M:%S')}, шаг {self.data_step_duration_str}")
