@@ -90,6 +90,19 @@ def build_lstm_autoencoder(sequence_length: int, num_features: int, config_param
     model = Model(inputs=inputs, outputs=outputs)
     return model
 
+def load_model(model_path: Path) -> tf.keras.Model:
+    """Загружает модель TensorFlow/Keras из файла."""
+    if not model_path.exists():
+        raise FileNotFoundError(f"Файл модели не найден: {model_path}")
+    try:
+        model = tf.keras.models.load_model(model_path)
+        logging.info(f"Модель успешно загружена из {model_path}")
+        model.summary(print_fn=logging.info)
+        return model
+    except Exception as e:
+        logging.error(f"Ошибка при загрузке модели из {model_path}: {e}", exc_info=True)
+        raise
+
 # --- Основной блок ---
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).resolve().parent
