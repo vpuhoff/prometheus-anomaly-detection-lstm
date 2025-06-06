@@ -2,6 +2,9 @@
 
 This project implements a system for detecting anomalies in time series data collected from Prometheus. It uses an LSTM (Long Short-Term Memory) autoencoder model built with TensorFlow/Keras to learn normal patterns from your metrics and identify deviations. The system includes scripts for data collection, preprocessing, model training, data filtering, and real-time anomaly detection, exposing results via a Prometheus exporter.
 
+**GitHub Repository:** [https://github.com/vpuhoff/prometheus-anomaly-detection-lstm](https://github.com/vpuhoff/prometheus-anomaly-detection-lstm)
+**PyPI Package:** [https://pypi.org/project/prometheus-anomaly-detection-lstm](https://pypi.org/project/prometheus-anomaly-detection-lstm)
+
 ## Features
 
   * **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries. The resulting dataset contains `day_of_week` and `hour_of_day` columns derived from timestamps.
@@ -13,7 +16,6 @@ This project implements a system for detecting anomalies in time series data col
   * **Configurable:** All stages are highly configurable via a central `config.yaml` file.
 
 WIKI: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
-![example graphics](example.png)
 
 ## Project Structure
 
@@ -43,8 +45,8 @@ WIKI: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
 1.  **Clone the Repository:**
 
     ```bash
-    git clone <your-repository-url>
-    cd <repository-name>
+    git clone https://github.com/vpuhoff/prometheus-anomaly-detection-lstm
+    cd prometheus-anomaly-detection-lstm
     ```
 
 2.  **Install Dependencies with Pipenv:**
@@ -143,7 +145,6 @@ Use the trained model from Step 3 to classify sequences in your dataset as "norm
   * Ensure `anomaly_threshold_mse` is appropriately set in `config.yaml`.
   * Configure output filenames in `data_filtering_settings`.
 
-
 ```bash
 python filter_anomalous_data.py
 ```
@@ -154,9 +155,10 @@ Outputs: `.npy` files containing the normal and anomalous sequences.
 
 Configure Prometheus to scrape the metrics endpoint from `realtime_detector.py`. Visualize metrics like:
 
+  * `anomaly_detector_latest_reconstruction_error_mse`
   * `anomaly_detector_is_anomaly_detected`
   * `anomaly_detector_total_anomalies_count_total`
-  * 'anomaly_detector_feature_reconstruction_error_mse{feature_name="your_alias"}`
+  * `anomaly_detector_feature_reconstruction_error_mse{feature_name="your_alias"}`
 
 ## Interpreting Results
 
