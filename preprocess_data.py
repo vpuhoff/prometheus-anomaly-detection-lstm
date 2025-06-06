@@ -152,6 +152,10 @@ if __name__ == "__main__":
     # Копируем DataFrame, чтобы избежать SettingWithCopyWarning при модификации
     df_processed = raw_df.copy()
     df_processed = handle_missing_values(df_processed, nan_strategy)
+
+    # Добавляем признаки дня недели и часа суток
+    df_processed['day_of_week'] = df_processed.index.dayofweek.astype(int)
+    df_processed['hour_of_day'] = df_processed.index.hour.astype(int)
     
     if df_processed.empty and not raw_df.empty:
         print("DataFrame стал пустым после обработки NaN (например, из-за drop_rows). Завершение.")

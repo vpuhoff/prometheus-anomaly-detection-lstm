@@ -58,6 +58,9 @@ preprocessing_settings:
   # Возможные значения: "MinMaxScaler", "StandardScaler"
   scaler_type: "MinMaxScaler"
 
+  # Скрипт также добавит два временных признака:
+  # 'day_of_week' и 'hour_of_day'
+
   # Имя файла для сохранения обработанных данных
   processed_output_filename: "processed_metrics_data.parquet"
 
