@@ -37,6 +37,7 @@ data_settings:
   step: "2m"
 
   # Имя файла для сохранения итогового датасета
+  # Файл будет содержать также колонки day_of_week и hour_of_day
   output_filename: "prometheus_metrics_data.parquet"
 
 preprocessing_settings:
@@ -58,7 +59,7 @@ preprocessing_settings:
   # Возможные значения: "MinMaxScaler", "StandardScaler"
   scaler_type: "MinMaxScaler"
 
-  # Скрипт также добавит два временных признака:
+  # На этом этапе и при сборе данных добавляются временные признаки:
   # 'day_of_week' и 'hour_of_day'
 
   # Имя файла для сохранения обработанных данных

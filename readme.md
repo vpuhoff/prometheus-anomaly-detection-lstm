@@ -4,8 +4,8 @@ This project implements a system for detecting anomalies in time series data col
 
 ## Features
 
-* **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries.
-* **Preprocessing:** Handles missing values, enriches data with day-of-week and hour-of-day features, and normalizes/scales values for optimal model training.
+* **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries. The resulting dataset contains `day_of_week` and `hour_of_day` columns derived from timestamps.
+* **Preprocessing:** Handles missing values and normalizes/scales values for optimal model training. The day-of-week and hour-of-day features are also ensured at this stage.
 * **LSTM Autoencoder Training:** Trains an LSTM autoencoder on the full preprocessed dataset.
 * **Data Filtering:** A script to apply the trained Model A to filter out anomalous sequences from a dataset.
 * **Real-time Anomaly Detection:** Continuously monitors new data and processes it with the trained model to detect anomalies.
@@ -94,11 +94,10 @@ Collect historical data from your Prometheus instance.
 ```bash
 python data_collector.py
 ```
-Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`).
+Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`) which now includes `day_of_week` and `hour_of_day` columns.
 
 **Step 2: Data Preprocessing (`preprocess_data.py`)**
-Preprocess the collected data (handles NaNs, scales features). During this step
-two additional columns are added: `day_of_week` (0-6) and `hour_of_day` (0-23).
+Preprocess the collected data (handles NaNs, scales features). If missing, the columns `day_of_week` (0-6) and `hour_of_day` (0-23) are added here as well.
 ```bash
 python preprocess_data.py
 ```
