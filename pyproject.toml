@@ -27,3 +27,13 @@ prometheus-ad-cli = "cli:main"
 
 [project.urls]
 Homepage = "https://github.com/vpuhoff/prometheus-anomaly-detection-lstm"
+
+[tool.setuptools]
+py_modules = [
+    "cli",
+    "data_collector",
+    "filter_anomalous_data",
+    "preprocess_data",
+    "realtime_detector",
+    "train_autoencoder"
+]
