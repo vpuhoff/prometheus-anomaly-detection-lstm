@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prometheus-anomaly-detection-lstm"
-version = "0.1.3"
+version = "0.1.4"
 description = "Prometheus time series anomaly detection with LSTM Autoencoder"
 readme = "readme.md"
 requires-python = ">=3.12"
@@ -28,8 +28,9 @@ prometheus-ad-cli = "cli:main"
 [project.urls]
 Homepage = "https://github.com/vpuhoff/prometheus-anomaly-detection-lstm"
 
+# The key must be `py-modules` with a HYPHEN.
 [tool.setuptools]
-py_modules = [
+py-modules = [
     "cli",
     "data_collector",
     "filter_anomalous_data",
