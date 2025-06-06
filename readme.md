@@ -24,14 +24,15 @@ This project implements a system for detecting anomalies in time series data col
 ├── train_autoencoder.py        # Script to train the LSTM autoencoder
 ├── filter_anomalous_data.py    # Script to filter data using the trained model to separate normal/anomalous sequences
 ├── realtime_detector.py        # Script for real-time anomaly detection and Prometheus exporter
-├── requirements.txt            # Python dependencies
+├── Pipfile                     # Dependency declarations
+├── Pipfile.lock                # Locked versions of dependencies
 └── README.md                   # This file
 ```
 
 ## Prerequisites
 
-* Python 3.8+
-* Pip (Python package installer)
+* Python 3.12
+* Pipenv for managing dependencies
 * A running Prometheus instance (v2.x or later) that is scraping the metrics you want to analyze.
 * (Optional) Exporters configured for your Prometheus to collect the desired metrics (e.g., `node_exporter`, `windows_exporter`).
 
@@ -43,24 +44,13 @@ This project implements a system for detecting anomalies in time series data col
     cd <repository-name>
     ```
 
-2.  **Create a Virtual Environment (Recommended):**
+2.  **Install Dependencies with Pipenv:**
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    pipenv install --dev
     ```
+    After installation you can enter the environment using `pipenv shell` or run scripts with `pipenv run`.
 
-3.  **Install Python Dependencies:**
-    A `requirements.txt` file should be included in the repository. Install dependencies using:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    If `requirements.txt` is not present, you can create one after installing the necessary packages manually:
-    ```bash
-    pip install pandas numpy PyYAML scikit-learn tensorflow joblib requests prometheus_client matplotlib
-    pip freeze > requirements.txt
-    ```
-
-4.  **Prometheus Setup:**
+3.  **Prometheus Setup:**
     Ensure your Prometheus server is running and accessible. The scripts will query this server based on the URL and PromQL queries defined in `config.yaml`. The example queries in `config.yaml` might use metrics from `windows_exporter`; adapt these to your own available metrics.
 
 ## Configuration (`config.yaml`)
@@ -154,7 +144,7 @@ Configure Prometheus to scrape the metrics endpoint from `realtime_detector.py`.
 
 ## Troubleshooting
 
-* **Python Dependencies:** Ensure `requirements.txt` is up-to-date and packages are installed.
+* **Python Dependencies:** Ensure `Pipfile`/`Pipfile.lock` are in sync and run `pipenv install` if packages change.
 * **Prometheus Connection:** Verify `prometheus_url` and query validity.
 * **Data Issues:** Check for "No data found" errors; inspect PromQL queries and Prometheus scrape targets. Review `nan_fill_strategy` if NaNs persist.
 * **Model Training:** If loss doesn't decrease, adjust learning rate, batch size, or architecture. For overfitting, utilize `EarlyStopping` or consider more data/regularization.
