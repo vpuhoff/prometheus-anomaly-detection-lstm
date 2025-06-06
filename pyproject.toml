@@ -9,7 +9,15 @@ description = "Prometheus time series anomaly detection with LSTM Autoencoder"
 readme = "readme.md"
 requires-python = ">=3.12"
 authors = [{name = "Unknown", email = "unknown@example.com"}]
-license = {text = "MIT"}
+license = "MIT"
+py_modules = [
+    "cli",
+    "data_collector",
+    "filter_anomalous_data",
+    "preprocess_data",
+    "realtime_detector",
+    "train_autoencoder"
+]
 dependencies = [
     "requests",
     "pandas",
