@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=61", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "prometheus-anomaly-detection-lstm"
-version = "0.1.4"
+version = "0.1.5"
 description = "Prometheus time series anomaly detection with LSTM Autoencoder"
 readme = "readme.md"
 requires-python = ">=3.12"
@@ -27,6 +27,8 @@ prometheus-ad-cli = "cli:main"
 
 [project.urls]
 Homepage = "https://github.com/vpuhoff/prometheus-anomaly-detection-lstm"
+
+[tool.setuptools_scm]
 
 # The key must be `py-modules` with a HYPHEN.
 [tool.setuptools]
