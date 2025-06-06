@@ -105,6 +105,11 @@ def collect_training_data(prometheus_url: str, queries_dict: dict, start_time: d
             final_df[col_name] = pd.NA 
 
     final_df = final_df.sort_index()
+
+    # Добавляем временные признаки для дня недели и часа суток
+    final_df['day_of_week'] = final_df.index.dayofweek.astype(int)
+    final_df['hour_of_day'] = final_df.index.hour.astype(int)
+
     return final_df
 
 # --- Основной блок ---
