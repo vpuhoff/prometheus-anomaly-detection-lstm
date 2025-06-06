@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prometheus-anomaly-detection-lstm"
-version = "0.1.5"
+dynamic = ["version"]
 description = "Prometheus time series anomaly detection with LSTM Autoencoder"
 readme = "readme.md"
 requires-python = ">=3.12"
