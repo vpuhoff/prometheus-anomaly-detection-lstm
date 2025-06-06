@@ -5,7 +5,7 @@ This project implements a system for detecting anomalies in time series data col
 ## Features
 
 * **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries.
-* **Preprocessing:** Handles missing values and normalizes/scales data for optimal model training.
+* **Preprocessing:** Handles missing values, enriches data with day-of-week and hour-of-day features, and normalizes/scales values for optimal model training.
 * **LSTM Autoencoder Training:** Trains an LSTM autoencoder on the full preprocessed dataset.
 * **Data Filtering:** A script to apply the trained Model A to filter out anomalous sequences from a dataset.
 * **Real-time Anomaly Detection:** Continuously monitors new data and processes it with the trained model to detect anomalies.
@@ -60,7 +60,7 @@ The `config.yaml` file is central to running this project. Key sections include:
 * **`prometheus_url`**: URL of your Prometheus server.
 * **`queries`**: Dictionary of PromQL queries with friendly aliases.
 * **`data_settings`**: Parameters for `data_collector.py` (e.g., `collection_period_hours`, `step`, `output_filename`).
-* **`preprocessing_settings`**: Parameters for `preprocess_data.py` (e.g., `nan_fill_strategy`, `scaler_type`, `processed_output_filename`, `scaler_output_filename`).
+* **`preprocessing_settings`**: Parameters for `preprocess_data.py` (e.g., `nan_fill_strategy`, `scaler_type`, `processed_output_filename`, `scaler_output_filename`). The preprocessing step also appends `day_of_week` and `hour_of_day` columns derived from the timestamp index.
 * **`training_settings`**: Parameters for `train_autoencoder.py`.
     * `model_output_filename`: Filename for Model A (trained on all data).
     * `sequence_length`, `train_split_ratio`, `epochs`, `batch_size`, `learning_rate`, `early_stopping_patience`: Standard training hyperparameters.
@@ -97,7 +97,8 @@ python data_collector.py
 Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`).
 
 **Step 2: Data Preprocessing (`preprocess_data.py`)**
-Preprocess the collected data (handles NaNs, scales features).
+Preprocess the collected data (handles NaNs, scales features). During this step
+two additional columns are added: `day_of_week` (0-6) and `hour_of_day` (0-23).
 ```bash
 python preprocess_data.py
 ```

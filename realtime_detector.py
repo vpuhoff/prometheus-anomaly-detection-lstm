@@ -33,7 +33,9 @@ class RealtimeAnomalyDetector:
 
         self.prom_url = self.config.get('prometheus_url')
         self.queries = self.config.get('queries', {})
-        self.metric_columns_ordered = list(self.queries.keys())
+        # Метрики из Prometheus плюс дополнительные временные признаки
+        self.time_feature_names = ['day_of_week', 'hour_of_day']
+        self.metric_columns_ordered = list(self.queries.keys()) + self.time_feature_names
 
         rt_config = self.config.get('real_time_anomaly_detection', {})
         self.query_interval = rt_config.get('query_interval_seconds', 60)
@@ -66,12 +68,13 @@ class RealtimeAnomalyDetector:
 
         if self.scaler:
             self.num_features = self.scaler.n_features_in_
-            if self.num_features != len(self.queries):
+            if self.num_features != len(self.metric_columns_ordered):
                 logging.error(
-                    f"Расхождение в количестве признаков! 'queries': {len(self.queries)}, Скейлер: {self.num_features}.")
+                    f"Расхождение в количестве признаков! Ожидалось {len(self.metric_columns_ordered)}, "
+                    f"в скейлере {self.num_features}.")
         else:
             logging.error("Скейлер не загружен.")
-            self.num_features = len(self.queries)
+            self.num_features = len(self.metric_columns_ordered)
 
         self._setup_prometheus_metrics()
 
@@ -145,7 +148,7 @@ class RealtimeAnomalyDetector:
         all_metric_dfs = []
         logging.info(
             f"Запрос данных: {start_time_query.strftime('%Y-%m-%d %H:%M:%S')} - {end_time.strftime('%Y-%m-%d %H:%M:%S')}, шаг {self.data_step_duration_str}")
-        for custom_name in self.metric_columns_ordered:
+        for custom_name in self.queries:
             query_string = self.queries[custom_name]
             api_url = f"{self.prom_url}/api/v1/query_range"
             params = {'query': query_string, 'start': start_time_query.timestamp(
@@ -184,6 +187,9 @@ class RealtimeAnomalyDetector:
             return None
         try:
             final_df = pd.concat(all_metric_dfs, axis=1, join='inner')
+            # Добавляем временные признаки
+            final_df['day_of_week'] = final_df.index.dayofweek.astype(int)
+            final_df['hour_of_day'] = final_df.index.hour.astype(int)
             if len(final_df) >= self.sequence_length:
                 if final_df.empty:
                     logging.warning("Итоговый DataFrame пуст.")
