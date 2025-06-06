@@ -167,3 +167,6 @@ Contributions are welcome! Please feel free to open an issue or submit a pull re
 ## License
 
 This project is licensed under the MIT License.
+## Publishing to PyPI
+
+This project includes a GitHub Actions workflow that builds and uploads the package to PyPI when a tag starting with `v` is pushed. Set the `PYPI_API_TOKEN` secret in your repository settings.
