@@ -88,7 +88,16 @@ The `config.yaml` file is central to running this project. Key sections include:
 
 ## Usage / Workflow
 
-The project follows a sequential workflow:
+The project follows a sequential workflow. Each stage can also be launched via the
+`cli.py` utility:
+```bash
+python cli.py collect       # сбор данных
+python cli.py preprocess    # предобработка
+python cli.py train         # обучение модели
+python cli.py detect        # запуск realtime детектора
+```
+
+The sequential workflow remains as follows:
 
 **Step 1: Data Collection (`data_collector.py`)**
 Collect historical data from your Prometheus instance.
