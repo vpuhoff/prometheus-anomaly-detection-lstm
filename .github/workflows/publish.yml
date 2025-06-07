@@ -15,13 +15,20 @@ jobs:
           python-version: '3.12'
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      
+      # Создаем виртуальное окружение перед установкой зависимостей
+      - name: Create Virtual Environment
+        run: uv venv
 
       - name: Install dependencies
         run: uv pip sync requirements.lock.txt
+
       - name: Build package
-        run: python -m build
+        run: uv run python -m build
+
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: uv run twine upload dist/*
+
