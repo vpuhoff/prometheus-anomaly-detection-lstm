@@ -66,7 +66,17 @@ The `config.yaml` file is central to running this project. Key sections include:
 
   * **`prometheus_url`**: URL of your Prometheus server.
   * **`queries`**: Dictionary of PromQL queries with friendly aliases.
-  * **`data_settings`**: Parameters for `data_collector.py` (e.g., `collection_period_hours`, `step`, `output_filename`).
+  * **`data_settings`**: Parameters for `data_collector.py`.
+      * `collection_periods_iso`: (Recommended) A list of specific time ranges to collect data from. This is the best way to create a high-quality training dataset by explicitly including periods of known normal operation and excluding periods with anomalies. If this parameter is present, it will be used instead of the other time settings.
+        ```yaml
+        collection_periods_iso:
+          - start: "2025-05-20T10:00:00"
+            end: "2025-05-22T18:00:00"
+          - start: "2025-05-25T09:00:00"
+            end: "2025-05-27T12:00:00"
+        ```
+      * `collection_period_hours`, `start_time_iso`, `end_time_iso`: Legacy parameters for specifying a single data collection window. These are used only if `collection_periods_iso` is not defined.
+      * `step`, `output_filename`: Defines the data sampling interval and the name of the output Parquet file.
   * **`preprocessing_settings`**: Parameters for `preprocess_data.py` (e.g., `nan_fill_strategy`, `scaler_type`, `processed_output_filename`, `scaler_output_filename`).
   * **`training_settings`**: Parameters for `train_autoencoder.py`.
       * `model_output_filename`: Filename for the trained model.
@@ -97,7 +107,7 @@ python cli.py detect        # запуск realtime детектора
 The sequential workflow is as follows:
 
 **Step 1: Data Collection (`data_collector.py`)**
-Collect historical data from your Prometheus instance.
+Collect historical data from your Prometheus instance. This script can combine data from multiple time ranges if specified in `config.yaml` under `collection_periods_iso`.
 
 ```bash
 python data_collector.py

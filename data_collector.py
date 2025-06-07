@@ -106,10 +106,6 @@ def collect_training_data(prometheus_url: str, queries_dict: dict, start_time: d
 
     final_df = final_df.sort_index()
 
-    # Добавляем временные признаки для дня недели и часа суток
-    final_df['day_of_week'] = final_df.index.dayofweek.astype(int)
-    final_df['hour_of_day'] = final_df.index.hour.astype(int)
-
     return final_df
 
 # --- Основной блок ---
@@ -120,61 +116,104 @@ if __name__ == "__main__":
 
     PROMETHEUS_URL = CONFIG.get('prometheus_url')
     QUERIES = CONFIG.get('queries')
-    DATA_SETTINGS = CONFIG.get('data_settings', {}) # Получаем вложенный словарь, или пустой, если его нет
+    DATA_SETTINGS = CONFIG.get('data_settings', {})
 
     if not PROMETHEUS_URL or not QUERIES:
         print("Ошибка: 'prometheus_url' или 'queries' не найдены в файле конфигурации.")
         exit(1)
 
-    # Определение временного диапазона
-    collection_period_hours = DATA_SETTINGS.get('collection_period_hours')
-    start_time_iso = DATA_SETTINGS.get('start_time_iso')
-    end_time_iso = DATA_SETTINGS.get('end_time_iso')
-
-    if start_time_iso and end_time_iso and (not collection_period_hours or collection_period_hours == 0) :
-        try:
-            START_TIME = datetime.fromisoformat(start_time_iso)
-            END_TIME = datetime.fromisoformat(end_time_iso)
-            if START_TIME >= END_TIME:
-                print("Ошибка: 'start_time_iso' должен быть раньше 'end_time_iso'.")
-                exit(1)
-        except ValueError:
-            print("Ошибка: 'start_time_iso' или 'end_time_iso' имеют неверный формат. Используйте YYYY-MM-DDTHH:MM:SS.")
-            exit(1)
-    elif collection_period_hours and collection_period_hours > 0:
-        END_TIME = datetime.now()
-        START_TIME = END_TIME - timedelta(hours=collection_period_hours)
-    else:
-        print("Ошибка: Некорректные настройки времени. Укажите 'collection_period_hours' > 0 или 'start_time_iso' и 'end_time_iso'.")
-        exit(1)
-
-    STEP = DATA_SETTINGS.get('step', '30s') # Значение по умолчанию, если не указано
+    STEP = DATA_SETTINGS.get('step', '30s')
     PARQUET_FILENAME = DATA_SETTINGS.get('output_filename', 'prometheus_metrics_data.parquet')
-
+    
     print(f"Сбор данных из Prometheus: {PROMETHEUS_URL}")
-    print(f"Запросы: {QUERIES}")
-    print(f"Период: с {START_TIME.strftime('%Y-%m-%d %H:%M:%S')} по {END_TIME.strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Шаг: {STEP}")
     print(f"Файл для сохранения: {PARQUET_FILENAME}")
     print("-" * 30)
 
-    training_data = collect_training_data(PROMETHEUS_URL, QUERIES, START_TIME, END_TIME, STEP)
+    training_data_list = []
+    collection_periods = DATA_SETTINGS.get('collection_periods_iso')
 
-    if not training_data.empty:
+    # 1. Проверяем новый параметр collection_periods_iso
+    if collection_periods and isinstance(collection_periods, list):
+        print("Обнаружена конфигурация с несколькими периодами 'collection_periods_iso'.")
+        for i, period in enumerate(collection_periods):
+            try:
+                start_time = datetime.fromisoformat(period['start'])
+                end_time = datetime.fromisoformat(period['end'])
+                if start_time >= end_time:
+                    print(f"Ошибка в периоде {i+1}: 'start' ({start_time}) должен быть раньше 'end' ({end_time}). Пропуск периода.")
+                    continue
+                
+                print(f"\n--- Сбор данных для периода {i+1}/{len(collection_periods)} ---")
+                period_df = collect_training_data(PROMETHEUS_URL, QUERIES, start_time, end_time, STEP)
+                if not period_df.empty:
+                    training_data_list.append(period_df)
+
+            except (KeyError, ValueError) as e:
+                print(f"Ошибка в конфигурации периода {i+1}: {e}. Убедитесь, что 'start' и 'end' заданы в верном формате ISO. Пропуск периода.")
+                continue
+
+    # 2. Если новый параметр не найден, используем старую логику
+    else:
+        print("Конфигурация 'collection_periods_iso' не найдена, используется 'collection_period_hours' или 'start_time_iso'/'end_time_iso'.")
+        collection_period_hours = DATA_SETTINGS.get('collection_period_hours')
+        start_time_iso = DATA_SETTINGS.get('start_time_iso')
+        end_time_iso = DATA_SETTINGS.get('end_time_iso')
+        
+        start_time, end_time = None, None
+        
+        if start_time_iso and end_time_iso and (not collection_period_hours or collection_period_hours == 0):
+            try:
+                start_time = datetime.fromisoformat(start_time_iso)
+                end_time = datetime.fromisoformat(end_time_iso)
+                if start_time >= end_time:
+                    print("Ошибка: 'start_time_iso' должен быть раньше 'end_time_iso'.")
+                    exit(1)
+            except ValueError:
+                print("Ошибка: 'start_time_iso' или 'end_time_iso' имеют неверный формат. Используйте YYYY-MM-DDTHH:MM:SS.")
+                exit(1)
+        elif collection_period_hours and collection_period_hours > 0:
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=collection_period_hours)
+        else:
+            print("Ошибка: Некорректные настройки времени. Укажите 'collection_periods_iso', 'collection_period_hours' > 0 или 'start_time_iso' и 'end_time_iso'.")
+            exit(1)
+            
+        if start_time and end_time:
+            print(f"\n--- Сбор данных для периода с {start_time.strftime('%Y-%m-%d %H:%M:%S')} по {end_time.strftime('%Y-%m-%d %H:%M:%S')} ---")
+            single_period_df = collect_training_data(PROMETHEUS_URL, QUERIES, start_time, end_time, STEP)
+            if not single_period_df.empty:
+                training_data_list.append(single_period_df)
+
+    # 3. Собираем итоговый DataFrame из всех собранных частей
+    if training_data_list:
+        print("\nОбъединение данных из всех периодов...")
+        final_training_data = pd.concat(training_data_list)
+        
+        # Сортируем по индексу (времени) на случай, если периоды шли не по порядку
+        final_training_data = final_training_data.sort_index()
+        
+        # Удаляем возможные дубликаты по индексу, если периоды перекрывались
+        final_training_data = final_training_data[~final_training_data.index.duplicated(keep='first')]
+
+        # Добавляем временные признаки в итоговый DataFrame
+        final_training_data['day_of_week'] = final_training_data.index.dayofweek.astype(int)
+        final_training_data['hour_of_day'] = final_training_data.index.hour.astype(int)
+
         print("\n--- Собранные данные (первые 5 и последние 5 строк) ---")
-        print(training_data.head())
+        print(final_training_data.head())
         print("...")
-        print(training_data.tail())
-        print(f"\nРазмер DataFrame: {training_data.shape}")
+        print(final_training_data.tail())
+        print(f"\nРазмер итогового DataFrame: {final_training_data.shape}")
         print("\nИнформация о DataFrame (до сохранения):")
-        training_data.info()
+        final_training_data.info()
 
         try:
             output_file_path = Path(__file__).parent / PARQUET_FILENAME
-            training_data.to_parquet(output_file_path, engine='pyarrow', index=True)
+            final_training_data.to_parquet(output_file_path, engine='pyarrow', index=True)
             print(f"\nДанные успешно сохранены в {output_file_path}")
         except Exception as e:
             print(f"\nОшибка при сохранении данных в Parquet: {e}")
             print("Убедитесь, что библиотека 'pyarrow' (или 'fastparquet') установлена.")
     else:
-        print("\nНе удалось собрать данные для обучения.")
+        print("\nНе удалось собрать никаких данных для указанных периодов.")
