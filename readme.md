@@ -6,6 +6,8 @@ This project implements a system for detecting anomalies in time series data col
 
 **PyPI Package:** [https://pypi.org/project/prometheus-anomaly-detection-lstm](https://pypi.org/project/prometheus-anomaly-detection-lstm)
 
+**WIKI**: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
+
 ## Features
 
 * **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries.
