@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "prometheus-anomaly-detection-lstm"
 dynamic = ["version"]
 description = "A system for detecting anomalies in time series data collected from Prometheus using an LSTM autoencoder."
+readme = "readme.md"
 requires-python = ">=3.12"
 authors = [{name = "AiLab", email = "vpuhoff9@gmail.com"}]
 license = "MIT"
