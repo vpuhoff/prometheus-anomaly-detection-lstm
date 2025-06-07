@@ -13,10 +13,11 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.12'
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
+        run: uv pip sync requirements.lock.txt
       - name: Build package
         run: python -m build
       - name: Publish to PyPI

@@ -10,8 +10,8 @@ training an LSTM autoencoder and detecting anomalies in real time.
 - Comments and log messages are generally in Russian—keep new ones consistent with this style.
 
 ## Dependencies
-- Packages are managed via `Pipfile` / `Pipfile.lock`.
-- After adding dependencies run `pipenv lock` to regenerate `Pipfile.lock`.
+- Packages are managed via `uv` / `requirements.lock.txt`.
+- After adding dependencies run `uv pip compile pyproject.toml --extra dev -o requirements.lock.txt`.
 
 ## Configuration
 - All runtime settings are in `config.yaml`. Document any new configuration keys
@@ -21,4 +21,4 @@ both in this file and in `README.md`.
 Before committing changes:
 1. Install dependencies:
    ```bash
-   pipenv install --dev
+   uv pip sync requirements.lock.txt

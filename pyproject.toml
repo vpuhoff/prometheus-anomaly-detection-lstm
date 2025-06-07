@@ -5,28 +5,33 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "prometheus-anomaly-detection-lstm"
 dynamic = ["version"]
-description = "Prometheus time series anomaly detection with LSTM Autoencoder"
-readme = "readme.md"
+description = "A system for detecting anomalies in time series data collected from Prometheus using an LSTM autoencoder."
 requires-python = ">=3.12"
-authors = [{name = "Unknown", email = "unknown@example.com"}]
+authors = [{name = "AiLab", email = "vpuhoff9@gmail.com"}]
 license = "MIT"
 dependencies = [
     "requests",
     "pandas",
-    "pyarrow",
     "pyyaml",
+    "diskcache",
     "scikit-learn",
     "joblib",
     "tensorflow",
     "matplotlib",
     "prometheus-client"
 ]
-
 [project.scripts]
 prometheus-ad-cli = "cli:main"
 
 [project.urls]
 Homepage = "https://github.com/vpuhoff/prometheus-anomaly-detection-lstm"
+Repository = "https://github.com/vpuhoff/prometheus-anomaly-detection-lstm"
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "twine"
+]
 
 [tool.setuptools_scm]
 
