@@ -118,6 +118,13 @@ if __name__ == "__main__":
     
     CONFIG = load_config(CONFIG_FILE_PATH)
 
+    # Получение пути для артефактов ---
+    artifacts_path_str = CONFIG.get('artifacts_dir', 'artifacts')
+    artifacts_dir = BASE_DIR / artifacts_path_str
+    # Создаем директорию, если она не существует (на всякий случай, хотя data_collector уже должен был это сделать)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Директория для артефактов: {artifacts_dir}")
+
     # Получаем настройки из конфигурации
     data_settings = CONFIG.get('data_settings', {})
     preprocess_settings = CONFIG.get('preprocessing_settings', {})
@@ -127,7 +134,9 @@ if __name__ == "__main__":
     if not input_filename:
         print("Ошибка: Имя входного файла не указано ни в 'preprocessing_settings.input_filename', ни в 'data_settings.output_filename'.")
         exit(1)
-    input_file_path = BASE_DIR / input_filename
+    
+    # Формируем путь к входному файлу внутри директории артефактов ---
+    input_file_path = artifacts_dir / input_filename
 
     # Настройки предобработки
     nan_strategy = preprocess_settings.get('nan_fill_strategy', 'ffill_then_bfill')
@@ -135,10 +144,11 @@ if __name__ == "__main__":
     
     # Выходные файлы
     processed_output_filename = preprocess_settings.get('processed_output_filename', 'processed_metrics_data.parquet')
-    processed_output_file_path = BASE_DIR / processed_output_filename
-    
     scaler_output_filename = preprocess_settings.get('scaler_output_filename', 'fitted_scaler.joblib')
-    scaler_output_file_path = BASE_DIR / scaler_output_filename
+
+    # Формируем пути к выходным файлам внутри директории артефактов ---
+    processed_output_file_path = artifacts_dir / processed_output_filename
+    scaler_output_file_path = artifacts_dir / scaler_output_filename
 
     print("--- Начало скрипта предобработки данных ---")
 

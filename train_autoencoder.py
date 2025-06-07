@@ -110,6 +110,13 @@ if __name__ == "__main__":
     
     CONFIG = load_config(CONFIG_FILE_PATH)
 
+    # Получение пути для артефактов ---
+    artifacts_path_str = CONFIG.get('artifacts_dir', 'artifacts')
+    artifacts_dir = BASE_DIR / artifacts_path_str
+    # Создаем директорию, если она не существует
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Директория для артефактов: {artifacts_dir}")
+
     # Извлечение настроек
     preprocess_settings = CONFIG.get('preprocessing_settings', {})
     training_settings = CONFIG.get('training_settings', {})
@@ -130,7 +137,9 @@ if __name__ == "__main__":
         logging.error("Имя файла с предобработанными данными Parquet не указано в config.yaml "
                       "(training_settings.input_processed_filename или preprocessing_settings.processed_output_filename).")
         exit(1)
-    input_file_path = BASE_DIR / input_parquet_filename
+        
+    # Формируем путь к входному файлу внутри директории артефактов ---
+    input_file_path = artifacts_dir / input_parquet_filename
     df_processed = load_processed_data_parquet(input_file_path)
 
     if df_processed.empty:
@@ -146,7 +155,8 @@ if __name__ == "__main__":
         logging.error("Не удалось создать ни одной последовательности из Parquet данных. Обучение невозможно.")
         exit(1)
 
-    model_output_path = BASE_DIR / model_output_filename
+    # Формируем путь к выходному файлу модели внутри директории артефактов ---
+    model_output_path = artifacts_dir / model_output_filename
     logging.info(f"Модель будет сохранена в: {model_output_path}")
 
     # Для автоэнкодера X (вход) и Y (цель) - это одни и те же последовательности
@@ -158,12 +168,10 @@ if __name__ == "__main__":
         logging.error(f"Слишком мало последовательностей ({X_all_sequences.shape[0]}) для разделения на train/validation.")
         exit(1)
 
-    # Убедимся, что test_size не равен 0 или 1, если train_split_ratio = 1 или 0
     val_split_size = 1.0 - train_split_ratio
     if val_split_size <= 0.0 or val_split_size >= 1.0:
-        if X_all_sequences.shape[0] > 1 : # Если есть что валидировать
-            logging.warning(f"train_split_ratio ({train_split_ratio}) некорректен для создания валидационной выборки. "
-                            f"Используется одна последовательность для валидации, если возможно.")
+        if X_all_sequences.shape[0] > 1: # Если есть что валидировать
+            logging.warning(f"train_split_ratio ({train_split_ratio}) некорректен для создания валидационной выборки. Используется одна последовательность для валидации, если возможно.")
             # Если train_split_ratio = 1, то val_split_size = 0. sklearn требует test_size > 0
             # В этом случае, можно взять 1 сэмпл для валидации, если всего их > 1
             if X_all_sequences.shape[0] > 1 and train_split_ratio >= 1.0 :
@@ -176,7 +184,6 @@ if __name__ == "__main__":
         else:
             X_train, X_val, y_train, y_val = X_all_sequences, np.array([]).reshape(0,sequence_length,num_features), y_all_sequences, np.array([]).reshape(0,sequence_length,num_features)
             logging.warning("Валидационная выборка пуста, так как всего одна последовательность.")
-
     else:
         X_train, X_val, y_train, y_val = train_test_split(
             X_all_sequences, y_all_sequences, train_size=train_split_ratio, shuffle=True, random_state=42
@@ -199,8 +206,8 @@ if __name__ == "__main__":
         callbacks.append(early_stopping)
         logging.info(f"EarlyStopping включен с терпением: {early_stopping_patience} эпох.")
     
-    # ModelCheckpoint для сохранения лучшей модели (опционально, но полезно)
-    checkpoint_dir = BASE_DIR / "model_checkpoints"
+    # Директория для чекпоинтов внутри директории артефактов ---
+    checkpoint_dir = artifacts_dir / "model_checkpoints"
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_filepath = checkpoint_dir / "best_model.keras"
     
@@ -214,10 +221,9 @@ if __name__ == "__main__":
     callbacks.append(model_checkpoint_callback)
     logging.info(f"ModelCheckpoint включен. Лучшая модель будет сохранена в: {checkpoint_filepath}")
 
-
     logging.info("\nНачало обучения модели...")
     validation_data_to_pass = None
-    if X_val.shape[0] > 0: # Передаем validation_data только если она не пустая
+    if X_val.shape[0] > 0:
         validation_data_to_pass = (X_val, y_val)
 
     history = autoencoder_model.fit(
@@ -232,19 +238,12 @@ if __name__ == "__main__":
 
     logging.info("Обучение завершено.")
 
-    # Если EarlyStopping восстановил лучшие веса, модель уже содержит их.
-    # Если сохраняли через ModelCheckpoint, можно загрузить лучшую модель оттуда перед финальным сохранением.
-    # Но для простоты, сохраним текущее состояние модели (которое должно быть лучшим, если restore_best_weights=True)
-    # или последним, если EarlyStopping не сработал.
-    # Если ModelCheckpoint сработал, лучшая модель уже в checkpoint_filepath.
-    # Загрузим лучшую модель с чекпоинта, если он существует и EarlyStopping не вернул лучшие веса (или для уверенности)
     if checkpoint_filepath.exists() and any(isinstance(cb, ModelCheckpoint) for cb in callbacks):
         logging.info(f"Загрузка лучшей модели из чекпоинта: {checkpoint_filepath}")
         try:
             autoencoder_model = load_model(checkpoint_filepath)
         except Exception as e:
             logging.error(f"Ошибка загрузки модели из чекпоинта {checkpoint_filepath}: {e}. Сохраняется последняя модель.")
-
 
     try:
         autoencoder_model.save(model_output_path)
@@ -253,7 +252,7 @@ if __name__ == "__main__":
         logging.error(f"Ошибка при сохранении модели: {e}")
 
     # Визуализация истории обучения (потери)
-    if validation_data_to_pass: # Рисуем val_loss только если она была
+    if validation_data_to_pass: 
         plt.figure(figsize=(10, 6))
         plt.plot(history.history['loss'], label='Потери на обучении (Train Loss)')
         plt.plot(history.history['val_loss'], label='Потери на валидации (Validation Loss)')
@@ -262,16 +261,15 @@ if __name__ == "__main__":
         plt.ylabel('Потери (MSE)')
         plt.legend()
         plt.grid(True)
-        plot_filename_loss = BASE_DIR / f"training_history_loss_{model_output_filename.replace('.keras', '')}.png"
+        # Путь для сохранения графика внутри директории артефактов ---
+        plot_filename_loss = artifacts_dir / f"training_history_loss_{model_output_filename.replace('.keras', '')}.png"
         try:
             plt.savefig(plot_filename_loss)
             logging.info(f"График истории обучения сохранен в: {plot_filename_loss}")
         except Exception as e:
             logging.error(f"Ошибка при сохранении графика истории обучения: {e}")
-        # plt.show()
     else:
         logging.info("График val_loss не строится, так как валидационная выборка была пуста.")
-
 
     # Оценка распределения ошибок реконструкции на валидационных данных (если они есть)
     if X_val.shape[0] > 0:
@@ -285,15 +283,14 @@ if __name__ == "__main__":
         plt.xlabel('Ошибка реконструкции (MSE)')
         plt.ylabel('Плотность')
         plt.grid(True)
-        plot_filename_hist = BASE_DIR / f"reconstruction_error_histogram_{model_output_filename.replace('.keras', '')}.png"
+        # Путь для сохранения гистограммы внутри директории артефактов ---
+        plot_filename_hist = artifacts_dir / f"reconstruction_error_histogram_{model_output_filename.replace('.keras', '')}.png"
         try:
             plt.savefig(plot_filename_hist)
             logging.info(f"Гистограмма ошибок реконструкции сохранена в: {plot_filename_hist}")
         except Exception as e:
             logging.error(f"Ошибка при сохранении гистограммы ошибок: {e}")
-        # plt.show()
     else:
         logging.info("Гистограмма ошибок реконструкции на валидации не строится, так как валидационная выборка была пуста.")
-
 
     logging.info(f"--- Скрипт обучения модели '{model_output_filename}' завершен ---")

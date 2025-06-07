@@ -73,6 +73,13 @@ if __name__ == "__main__":
     
     CONFIG = load_config(CONFIG_FILE_PATH)
 
+    # Получение пути для артефактов ---
+    artifacts_path_str = CONFIG.get('artifacts_dir', 'artifacts')
+    artifacts_dir = BASE_DIR / artifacts_path_str
+    # Создаем директорию на случай, если скрипт запускается отдельно
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Директория для артефактов: {artifacts_dir}")
+
     # Извлечение необходимых настроек из разных секций
     preprocess_settings = CONFIG.get('preprocessing_settings', {})
     training_settings = CONFIG.get('training_settings', {})
@@ -90,19 +97,18 @@ if __name__ == "__main__":
                       "preprocessing_settings, training_settings, real_time_anomaly_detection.")
         exit(1)
     
-    input_file_path = BASE_DIR / input_processed_filename
-    model_path = BASE_DIR / model_filename
+    # Формируем пути к входным файлам внутри директории артефактов ---
+    input_file_path = artifacts_dir / input_processed_filename
+    model_path = artifacts_dir / model_filename
 
     # Имена выходных файлов
     normal_seq_output_filename = filtering_settings.get('normal_sequences_output_filename', 'filtered_normal_sequences.npy')
     anomalous_seq_output_filename = filtering_settings.get('anomalous_sequences_output_filename', 'filtered_anomalous_sequences.npy')
-    # all_errors_output_filename = filtering_settings.get('all_sequence_errors_output_filename') # Если нужно сохранять все ошибки
-
-    normal_seq_output_path = BASE_DIR / normal_seq_output_filename
-    anomalous_seq_output_path = BASE_DIR / anomalous_seq_output_filename
-    # if all_errors_output_filename:
-    #     all_errors_output_path = BASE_DIR / all_errors_output_filename
-
+    
+    # Формируем пути к выходным файлам внутри директории артефактов ---
+    normal_seq_output_path = artifacts_dir / normal_seq_output_filename
+    anomalous_seq_output_path = artifacts_dir / anomalous_seq_output_filename
+    
     logging.info("--- Начало скрипта фильтрации аномальных данных ---")
 
     # 1. Загрузка предобработанных данных (масштабированных)
@@ -125,20 +131,12 @@ if __name__ == "__main__":
 
     # 4. Получение реконструкций и расчет ошибок MSE для каждой последовательности
     logging.info("Получение реконструкций от модели...")
-    reconstructed_sequences = model.predict(all_sequences, batch_size=training_settings.get('batch_size', 64)) # Используем batch_size из обучения для эффективности
+    reconstructed_sequences = model.predict(all_sequences, batch_size=training_settings.get('batch_size', 64))
     
     # Расчет MSE для каждой последовательности
     # all_sequences и reconstructed_sequences имеют форму (num_samples, sequence_length, num_features)
     ms_errors = np.mean(np.power(all_sequences - reconstructed_sequences, 2), axis=(1, 2))
     logging.info(f"Рассчитаны ошибки реконструкции для {len(ms_errors)} последовательностей.")
-
-    # if all_errors_output_filename:
-    #     try:
-    #         np.save(all_errors_output_path, ms_errors)
-    #         logging.info(f"Все ошибки реконструкции сохранены в: {all_errors_output_path}")
-    #     except Exception as e:
-    #         logging.error(f"Ошибка при сохранении всех ошибок реконструкции: {e}")
-
 
     # 5. Фильтрация последовательностей на основе порога
     normal_mask = ms_errors <= anomaly_threshold_mse

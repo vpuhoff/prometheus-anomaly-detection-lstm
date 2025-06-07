@@ -21,6 +21,7 @@ WIKI: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
 
 ```
 .
+├── artifacts/                  # Directory for all generated files (data, models, etc.)
 ├── config.yaml                 # Central configuration file for all scripts
 ├── cli.py                      # Command-line utility to run workflow stages
 ├── data_collector.py           # Script to collect historical data from Prometheus
@@ -64,6 +65,7 @@ WIKI: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
 
 The `config.yaml` file is central to running this project. Key sections include:
 
+  * **`artifacts_dir`**: The directory where all generated artifacts (datasets, scalers, models, plots) will be saved. This helps to keep the main project directory clean.
   * **`prometheus_url`**: URL of your Prometheus server.
   * **`queries`**: Dictionary of PromQL queries with friendly aliases.
   * **`data_settings`**: Parameters for `data_collector.py`.
@@ -95,7 +97,7 @@ The `config.yaml` file is central to running this project. Key sections include:
 
 ## Usage / Workflow
 
-The project follows a sequential workflow. Each stage can be launched via the `cli.py` utility:
+The project follows a sequential workflow. Each stage can be launched via the `cli.py` utility. All output files will be placed in the directory specified by `artifacts_dir` in `config.yaml`.
 
 ```bash
 python cli.py collect       # сбор данных
@@ -113,7 +115,7 @@ Collect historical data from your Prometheus instance. This script can combine d
 python data_collector.py
 ```
 
-Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`) which includes `day_of_week` and `hour_of_day` columns.
+Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`) which includes `day_of_week` and `hour_of_day` columns, saved in the `artifacts_dir` directory.
 
 **Step 2: Data Preprocessing (`preprocess_data.py`)**
 Preprocess the collected data (handles NaNs, scales features).
@@ -122,7 +124,7 @@ Preprocess the collected data (handles NaNs, scales features).
 python preprocess_data.py
 ```
 
-Outputs: A processed data Parquet file (e.g., `processed_metrics_data.parquet`) and a saved scaler (e.g., `fitted_scaler.joblib`).
+Outputs: A processed data Parquet file (e.g., `processed_metrics_data.parquet`) and a saved scaler (e.g., `fitted_scaler.joblib`), both saved in `artifacts_dir`.
 
 **Step 3: Train Model (`train_autoencoder.py`)**
 Train the LSTM autoencoder on the entire preprocessed dataset from Step 2.
@@ -131,7 +133,7 @@ Train the LSTM autoencoder on the entire preprocessed dataset from Step 2.
 python train_autoencoder.py
 ```
 
-Outputs:
+Outputs (all saved in `artifacts_dir`):
 
   * A trained Keras model (e.g., `lstm_autoencoder_model.keras`).
   * A training history plot (`training_history_loss_...png`).
@@ -142,6 +144,7 @@ Run the real-time detector using the trained model from Step 3.
 
   * Ensure `model_output_filename` in `training_settings` points to your trained model.
   * Ensure `anomaly_threshold_mse` in `real_time_anomaly_detection` is correctly set based on the histogram from Step 3.
+  * The script will automatically look for the model and scaler in the `artifacts_dir` directory.
 
 ```bash
 python realtime_detector.py
@@ -159,7 +162,7 @@ Use the trained model from Step 3 to classify sequences in your dataset as "norm
 python filter_anomalous_data.py
 ```
 
-Outputs: `.npy` files containing the normal and anomalous sequences.
+Outputs: `.npy` files containing the normal and anomalous sequences, saved in `artifacts_dir`.
 
 ## Monitoring (Prometheus & Grafana)
 
@@ -187,7 +190,7 @@ Configure Prometheus to scrape the metrics endpoint from `realtime_detector.py`.
   * **Prometheus Connection:** Verify `prometheus_url` and query validity in `config.yaml`.
   * **Data Issues:** Check for "No data found" errors; inspect PromQL queries and Prometheus scrape targets. Review `nan_fill_strategy` if NaNs persist.
   * **Model Training:** If loss doesn't decrease, adjust learning rate, batch size, or architecture. `EarlyStopping` is configured to prevent overfitting.
-  * **File Not Found:** Double-check filenames in `config.yaml` against actual generated files (models, scalers, datasets).
+  * **File Not Found:** Double-check filenames in `config.yaml`. Ensure that the `artifacts_dir` setting is correct and that the necessary input files exist in that directory.
   * **Port in Use:** If `realtime_detector.py` fails, the `exporter_port` might be occupied by another process.
 
 ## Contributing

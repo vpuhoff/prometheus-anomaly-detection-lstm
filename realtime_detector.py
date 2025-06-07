@@ -31,6 +31,12 @@ class RealtimeAnomalyDetector:
         self.config_path = config_path
         self.config = self._load_config()
 
+        # Получение пути для артефактов ---
+        base_dir = Path(__file__).resolve().parent
+        artifacts_path_str = self.config.get('artifacts_dir', 'artifacts')
+        artifacts_dir = base_dir / artifacts_path_str
+        logging.info(f"Используется директория для артефактов: {artifacts_dir}")
+
         self.prom_url = self.config.get('prometheus_url')
         self.queries = self.config.get('queries', {})
         # Метрики из Prometheus плюс дополнительные временные признаки
@@ -58,10 +64,10 @@ class RealtimeAnomalyDetector:
         self.data_step_duration_str = rt_config.get(
             'data_step_duration', data_s_config.get('step', '30s'))
 
-        base_dir = Path(__file__).resolve().parent
-        self.scaler_path = base_dir / scaler_filename
-        self.model_a_path = base_dir / model_a_filename
-
+        # Формируем пути к файлам внутри директории артефактов ---
+        self.scaler_path = artifacts_dir / scaler_filename
+        self.model_a_path = artifacts_dir / model_a_filename
+        
         self.scaler = self._load_scaler()
         logging.info("Загрузка модели...")
         self.model_a = self._load_tf_model(self.model_a_path, "Модель")
@@ -394,11 +400,11 @@ class RealtimeAnomalyDetector:
 
 if __name__ == "__main__":
     config_file = Path(__file__).resolve().parent / "config.yaml"
-    PROM_LATEST_RECONSTRUCTION_ERROR_MSE = None  # ИСПРАВЛЕНО
+    PROM_LATEST_RECONSTRUCTION_ERROR_MSE = None
     PROM_IS_ANOMALY_DETECTED = None
     PROM_TOTAL_ANOMALIES_COUNT = None
-    PROM_FEATURE_RECONSTRUCTION_ERROR_MSE = None  # ИСПРАВЛЕНО
-    PROM_LAST_SUCCESSFUL_RUN_TIMESTAMP_SECONDS = None  # ИСПРАВЛЕНО
-    PROM_DATA_POINTS_IN_CURRENT_WINDOW = None  # ИСПРАВЛЕНО
+    PROM_FEATURE_RECONSTRUCTION_ERROR_MSE = None
+    PROM_LAST_SUCCESSFUL_RUN_TIMESTAMP_SECONDS = None
+    PROM_DATA_POINTS_IN_CURRENT_WINDOW = None
     detector = RealtimeAnomalyDetector(config_path=config_file)
     detector.start_server_and_loop()

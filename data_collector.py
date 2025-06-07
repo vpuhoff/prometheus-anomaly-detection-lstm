@@ -111,8 +111,23 @@ def collect_training_data(prometheus_url: str, queries_dict: dict, start_time: d
 # --- Основной блок ---
 if __name__ == "__main__":
     # Определяем путь к файлу конфигурации относительно текущего скрипта
-    CONFIG_FILE_PATH = Path(__file__).parent / "config.yaml"
+    BASE_DIR = Path(__file__).parent
+    CONFIG_FILE_PATH = BASE_DIR / "config.yaml"
     CONFIG = load_config(CONFIG_FILE_PATH)
+
+    # Получаем путь из конфига, по умолчанию 'artifacts'
+    artifacts_path_str = CONFIG.get('artifacts_dir', 'artifacts')
+    # Создаем объект Path. Если путь абсолютный, он останется таковым.
+    # Если относительный, он будет относительно базовой директории скрипта.
+    artifacts_dir = BASE_DIR / artifacts_path_str
+    
+    # Создаем директорию, если она не существует
+    try:
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Директория для артефактов: {artifacts_dir}")
+    except Exception as e:
+        print(f"Не удалось создать директорию для артефактов {artifacts_dir}: {e}")
+        exit(1)
 
     PROMETHEUS_URL = CONFIG.get('prometheus_url')
     QUERIES = CONFIG.get('queries')
@@ -124,10 +139,12 @@ if __name__ == "__main__":
 
     STEP = DATA_SETTINGS.get('step', '30s')
     PARQUET_FILENAME = DATA_SETTINGS.get('output_filename', 'prometheus_metrics_data.parquet')
+
+    output_file_path = artifacts_dir / PARQUET_FILENAME
     
     print(f"Сбор данных из Prometheus: {PROMETHEUS_URL}")
     print(f"Шаг: {STEP}")
-    print(f"Файл для сохранения: {PARQUET_FILENAME}")
+    print(f"Файл для сохранения: {output_file_path}")
     print("-" * 30)
 
     training_data_list = []
@@ -209,7 +226,6 @@ if __name__ == "__main__":
         final_training_data.info()
 
         try:
-            output_file_path = Path(__file__).parent / PARQUET_FILENAME
             final_training_data.to_parquet(output_file_path, engine='pyarrow', index=True)
             print(f"\nДанные успешно сохранены в {output_file_path}")
         except Exception as e:
