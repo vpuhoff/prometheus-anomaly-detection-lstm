@@ -13,6 +13,7 @@ joblib = "*"
 tensorflow = "*"
 matplotlib = "*"
 prometheus-client = "*"
+diskcache = "*"
 
 [dev-packages]
 build = "*"

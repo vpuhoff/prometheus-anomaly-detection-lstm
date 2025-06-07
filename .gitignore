@@ -3,3 +3,4 @@
 *.parquet
 *.png
 *.npy
+*.db

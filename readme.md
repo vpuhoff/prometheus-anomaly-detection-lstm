@@ -8,6 +8,7 @@ This project implements a system for detecting anomalies in time series data col
 ## Features
 
   * **Data Collection:** Fetches time series data from a Prometheus instance for specified PromQL queries. The resulting dataset contains `day_of_week` and `hour_of_day` columns derived from timestamps.
+  * **Efficient Caching:** Caches historical data from Prometheus in small, reusable chunks to dramatically speed up subsequent runs and reduce redundant API calls.
   * **Preprocessing:** Handles missing values and normalizes/scales values for optimal model training. The day-of-week and hour-of-day features are also ensured at this stage.
   * **LSTM Autoencoder Training:** Trains an LSTM autoencoder on the full preprocessed dataset.
   * **Data Filtering:** An optional script to apply the trained model to filter out anomalous sequences from a dataset for further analysis.
@@ -22,6 +23,7 @@ WIKI: [deepwiki](https://deepwiki.com/vpuhoff/prometheus-anomaly-detection-lstm)
 ```
 .
 ├── artifacts/                  # Directory for all generated files (data, models, etc.)
+│   └── prometheus_cache/       # On-disk cache for Prometheus queries
 ├── config.yaml                 # Central configuration file for all scripts
 ├── cli.py                      # Command-line utility to run workflow stages
 ├── data_collector.py           # Script to collect historical data from Prometheus
@@ -78,7 +80,9 @@ The `config.yaml` file is central to running this project. Key sections include:
             end: "2025-05-27T12:00:00"
         ```
       * `collection_period_hours`, `start_time_iso`, `end_time_iso`: Legacy parameters for specifying a single data collection window. These are used only if `collection_periods_iso` is not defined.
-      * `step`, `output_filename`: Defines the data sampling interval and the name of the output Parquet file.
+      * `step`: Defines the data sampling interval (e.g., `30s`, `2m`).
+      * `output_filename`: The name of the output Parquet file.
+      * `cache_chunk_hours`: (Optional) The size in hours for splitting large time ranges into smaller chunks for more efficient caching. Defaults to `1`.
   * **`preprocessing_settings`**: Parameters for `preprocess_data.py` (e.g., `nan_fill_strategy`, `scaler_type`, `processed_output_filename`, `scaler_output_filename`).
   * **`training_settings`**: Parameters for `train_autoencoder.py`.
       * `model_output_filename`: Filename for the trained model.
@@ -109,13 +113,13 @@ python cli.py detect        # запуск realtime детектора
 The sequential workflow is as follows:
 
 **Step 1: Data Collection (`data_collector.py`)**
-Collect historical data from your Prometheus instance. This script can combine data from multiple time ranges if specified in `config.yaml` under `collection_periods_iso`.
+Collect historical data from your Prometheus instance. This script can combine data from multiple time ranges if specified in `config.yaml` under `collection_periods_iso`. The script uses an efficient caching mechanism, so the first run might be slow, but subsequent runs for the same time periods will be significantly faster.
 
 ```bash
 python data_collector.py
 ```
 
-Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`) which includes `day_of_week` and `hour_of_day` columns, saved in the `artifacts_dir` directory.
+Output: Raw data Parquet file (e.g., `prometheus_metrics_data.parquet`) which includes `day_of_week` and `hour_of_day` columns, saved in the `artifacts_dir` directory. A `prometheus_cache` subdirectory will also be created here.
 
 **Step 2: Data Preprocessing (`preprocess_data.py`)**
 Preprocess the collected data (handles NaNs, scales features).
@@ -191,6 +195,7 @@ Configure Prometheus to scrape the metrics endpoint from `realtime_detector.py`.
   * **Data Issues:** Check for "No data found" errors; inspect PromQL queries and Prometheus scrape targets. Review `nan_fill_strategy` if NaNs persist.
   * **Model Training:** If loss doesn't decrease, adjust learning rate, batch size, or architecture. `EarlyStopping` is configured to prevent overfitting.
   * **File Not Found:** Double-check filenames in `config.yaml`. Ensure that the `artifacts_dir` setting is correct and that the necessary input files exist in that directory.
+  * **Forcing Data Re-fetch:** If you need to force the system to re-download data from Prometheus and ignore the cache, you can manually delete the `prometheus_cache` directory inside your `artifacts_dir`.
   * **Port in Use:** If `realtime_detector.py` fails, the `exporter_port` might be occupied by another process.
 
 ## Contributing
