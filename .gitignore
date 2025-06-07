@@ -5,3 +5,4 @@
 *.npy
 *.db
 .venv
+*.egg-info/*

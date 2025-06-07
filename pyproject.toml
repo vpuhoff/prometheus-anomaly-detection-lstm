@@ -19,7 +19,9 @@ dependencies = [
     "joblib",
     "tensorflow",
     "matplotlib",
-    "prometheus-client"
+    "prometheus-client",
+    "fastparquet>=2024.11.0",
+    "pyarrow>=20.0.0",
 ]
 [project.scripts]
 prometheus-ad-cli = "cli:main"
