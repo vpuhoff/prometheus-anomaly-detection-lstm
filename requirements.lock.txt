@@ -31,7 +31,7 @@ fastparquet==2024.11.0
     # via prometheus-anomaly-detection-lstm (pyproject.toml)
 flatbuffers==25.2.10
     # via tensorflow
-fonttools==4.58.2
+fonttools==4.61.0
     # via matplotlib
 fsspec==2025.5.1
     # via fastparquet
