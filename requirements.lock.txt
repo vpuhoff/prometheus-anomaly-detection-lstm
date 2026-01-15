@@ -31,7 +31,7 @@ fastparquet==2024.11.0
     # via prometheus-anomaly-detection-lstm (pyproject.toml)
 flatbuffers==25.2.10
     # via tensorflow
-fonttools==4.58.2
+fonttools==4.60.2
     # via matplotlib
 fsspec==2025.5.1
     # via fastparquet
@@ -65,7 +65,7 @@ joblib==1.5.1
     # via
     #   prometheus-anomaly-detection-lstm (pyproject.toml)
     #   scikit-learn
-keras==3.12.0
+keras==3.13.1
     # via tensorflow
 keyring==25.6.0
     # via twine
@@ -205,11 +205,11 @@ typing-extensions==4.14.0
     #   tensorflow
 tzdata==2025.2
     # via pandas
-urllib3==2.5.0
+urllib3==2.6.3
     # via
     #   requests
     #   twine
-werkzeug==3.1.3
+werkzeug==3.1.5
     # via tensorboard
 wheel==0.45.1
     # via astunparse
